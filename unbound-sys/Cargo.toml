@@ -1,0 +1,15 @@
+[package]
+name = "unbound-sys"
+version = "0.1.0"
+authors = ["Andrew Tunnell-Jones <andrew@tj.id.au>"]
+license = "BSD-3-Clause"
+description = "FFI bindings to libunbound"
+homepage = "https://github.com/andrewtj/rust-unbound"
+repository = "https://github.com/andrewtj/rust-unbound"
+readme = "../README.md"
+build = "build.rs"
+links = "unbound"
+
+[dependencies]
+openssl = "0.7"
+libc = "0.2"

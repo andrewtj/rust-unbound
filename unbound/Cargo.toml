@@ -1,0 +1,14 @@
+[package]
+name = "unbound"
+version = "0.1.0"
+authors = ["Andrew Tunnell-Jones <andrew@tj.id.au>"]
+license = "BSD-3-Clause"
+description = "libunbound wrapper"
+homepage = "https://github.com/andrewtj/rust-unbound"
+repository = "https://github.com/andrewtj/rust-unbound"
+readme = "../README.md"
+keywords = ["dns", "dnssec"]
+
+[dependencies]
+unbound-sys = { version = "0.1", path = "../unbound-sys" }
+libc = "0.2"
