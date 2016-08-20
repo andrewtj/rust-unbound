@@ -215,13 +215,13 @@ fn path_to_cstring(path: &Path) -> Result<CString> {
 
 impl Context {
     /// Attempts to construct a new `Context`.
-    pub fn new() -> Option<Context> {
+    pub fn new() -> std::result::Result<Context, ()> {
         sys::init();
         let ctx = unsafe { sys::ub_ctx_create() };
         if ctx.is_null() {
-            None
+            Err(())
         } else {
-            Some(Context {
+            Ok(Context {
                 ub_ctx: ctx,
                 callbacks: Mutex::new(ContextHashMap::new()),
             })
