@@ -134,7 +134,7 @@ impl Answer {
     pub fn havedata(&self) -> bool {
         unsafe { (*self.0).havedata != 0 }
     }
-    /// Returns trust if there is no data because name does not exist.
+    /// Returns true if there is no data because a name does not exist.
     pub fn nxdomain(&self) -> bool {
         unsafe { (*self.0).nxdomain != 0 }
     }
