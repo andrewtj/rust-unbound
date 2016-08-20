@@ -508,13 +508,13 @@ fn test_ctx_options() {
     assert!(ctx.set_option("foo", "bah").is_err());
     assert!(ctx.get_option("foo").is_err());
     assert!(ctx.config("test/empty").is_ok());
-    assert!(ctx.config("/").is_err());
+    assert!(ctx.config("test/no-such-file").is_err());
     assert!(ctx.resolvconf().is_ok());
     assert!(ctx.resolvconf_path("test/google-dns-resolv.conf").is_ok());
-    assert!(ctx.resolvconf_path("/").is_err());
-    assert!(ctx.set_fwd("8.8.8.8:53").is_ok());
-    assert!(ctx.set_fwd("").is_err());
+    assert!(ctx.resolvconf_path("test/no-such-file").is_err());
+    assert!(ctx.set_fwd("8.8.8.8").is_ok());
+    assert!(ctx.set_fwd("!").is_err());
     assert!(ctx.hosts().is_ok());
     assert!(ctx.hosts_path("test/empty").is_ok());
-    assert!(ctx.hosts_path("/").is_err());
+    assert!(ctx.hosts_path("test/no-such-file").is_err());
 }
