@@ -16,6 +16,7 @@ use std::ffi::{CStr, CString, NulError};
 use std::{fmt, mem, ptr};
 use std::sync::Mutex;
 use std::path::Path;
+use std::os::raw::c_void;
 
 extern crate libc;
 extern crate unbound_sys as sys;
@@ -77,7 +78,7 @@ macro_rules! into_result {
 }
 
 /// Wraps `ub_result`. The result of DNS resolution and validation of a query.
-pub struct Answer(*mut sys::Struct_ub_result);
+pub struct Answer(*mut sys::ub_result);
 
 impl Answer {
     /// Returns original question's name.
@@ -204,7 +205,7 @@ impl<'a> std::iter::Iterator for Datas<'a> {
 
 /// Wraps `ub_ctx`.
 pub struct Context {
-    ub_ctx: *mut sys::Struct_ub_ctx,
+    ub_ctx: *mut sys::ub_ctx,
     callbacks: Mutex<ContextHashMap>,
 }
 
@@ -346,7 +347,7 @@ impl Context {
     }
     /// Wraps `ub_resolve`.
     pub fn resolve(&self, name: &str, rrtype: u16, class: u16) -> Result<Answer> {
-        let mut result: *mut sys::Struct_ub_result = ptr::null_mut();
+        let mut result: *mut sys::ub_result = ptr::null_mut();
         let name = try!(CString::new(name));
         unsafe {
             into_result!(sys::ub_resolve(self.ub_ctx,
@@ -431,9 +432,9 @@ impl fmt::Debug for Context {
     }
 }
 
-unsafe extern "C" fn rust_unbound_callback(ctx_raw: *mut libc::c_void,
+unsafe extern "C" fn rust_unbound_callback(ctx_raw: *mut c_void,
                                            error: libc::c_int,
-                                           result: *mut sys::Struct_ub_result) {
+                                           result: *mut sys::ub_result) {
     CallbackContext::from_raw(ctx_raw).call_and_remove(into_result!(error, Answer(result)));
 }
 
@@ -449,7 +450,7 @@ impl std::cmp::PartialEq for AsyncID {
     }
 }
 
-type ContextHashMap = HashMap<libc::c_int, *mut libc::c_void>;
+type ContextHashMap = HashMap<libc::c_int, *mut c_void>;
 
 struct CallbackContext {
     inner: Box<CallbackContextInner>,
@@ -464,11 +465,11 @@ impl CallbackContext {
         let inner = CallbackContextInner(0, chm, Box::new(cb));
         CallbackContext { inner: Box::new(inner) }
     }
-    unsafe fn from_raw(raw: *mut libc::c_void) -> Self {
+    unsafe fn from_raw(raw: *mut c_void) -> Self {
         CallbackContext { inner: Box::from_raw(raw as *mut CallbackContextInner) }
     }
-    fn into_raw(self) -> *mut libc::c_void {
-        Box::into_raw(self.inner) as *mut libc::c_void
+    fn into_raw(self) -> *mut c_void {
+        Box::into_raw(self.inner) as *mut c_void
     }
     fn id_raw(&mut self) -> *mut libc::c_int {
         &mut self.inner.0 as *mut _
