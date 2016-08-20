@@ -481,8 +481,8 @@ impl CallbackContext {
     }
 }
 
-unsafe impl Sync for Context{}
-unsafe impl Send for Context{}
+unsafe impl Sync for Context {}
+unsafe impl Send for Context {}
 
 impl Drop for Context {
     fn drop(&mut self) {
