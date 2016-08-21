@@ -441,14 +441,8 @@ unsafe extern "C" fn rust_unbound_callback(ctx_raw: *mut c_void,
 
 /// Identifies an asynchronous query.
 // TODO: Copy? .cancel() ?
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct AsyncID(libc::c_int);
-
-impl std::cmp::PartialEq for AsyncID {
-    fn eq(&self, other: &AsyncID) -> bool {
-        self.0 == other.0
-    }
-}
 
 type ContextHashMap = HashMap<libc::c_int, *mut c_void>;
 
