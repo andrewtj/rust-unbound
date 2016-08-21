@@ -7,6 +7,9 @@ License: [BSD 3-clause](LICENSE)
 rust-unbound provides unsafe FFI bindings and a safe wrapper for
 [libunbound](https://unbound.nlnetlabs.nl/).
 
+* [Documentation](http://www.andrewtj.org/rust-unbound/unbound/)
+* [Examples](unbound/examples)
+
 ## Building
 
 rust-unbound wraps libunbound. libunbound depends on OpenSSL which this
