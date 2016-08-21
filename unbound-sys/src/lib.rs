@@ -8,5 +8,5 @@ extern crate openssl;
 mod sys;
 
 pub fn init() {
-    openssl::ssl::init();
+    openssl::init();
 }
