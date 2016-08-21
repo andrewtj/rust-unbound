@@ -365,7 +365,7 @@ impl Context {
                             class: u16,
                             callback: C)
                             -> Result<AsyncID>
-        where C: Fn(Result<Answer>) + 'static
+        where C: Fn(AsyncID, Result<Answer>) + 'static
     {
         let name = try!(CString::new(name));
         let mut hm = self.callbacks.lock().unwrap();
@@ -450,11 +450,11 @@ struct CallbackContext {
     inner: Box<CallbackContextInner>,
 }
 
-struct CallbackContextInner(libc::c_int, *mut ContextHashMap, Box<Fn(Result<Answer>)>);
+struct CallbackContextInner(libc::c_int, *mut ContextHashMap, Box<Fn(AsyncID, Result<Answer>)>);
 
 impl CallbackContext {
     fn new<C>(chm: &mut ContextHashMap, cb: C) -> Self
-        where C: 'static + Fn(Result<Answer>)
+        where C: 'static + Fn(AsyncID, Result<Answer>)
     {
         let inner = CallbackContextInner(0, chm, Box::new(cb));
         CallbackContext { inner: Box::new(inner) }
@@ -471,7 +471,7 @@ impl CallbackContext {
     fn call_and_remove(&self, result: Result<Answer>) {
         unsafe {
             mem::transmute::<_, &mut ContextHashMap>(self.inner.1).remove(&self.inner.0);
-            self.inner.2(result);
+            self.inner.2(AsyncID(self.inner.0), result);
         }
     }
 }

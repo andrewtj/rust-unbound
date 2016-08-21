@@ -10,7 +10,7 @@ fn main() {
     let mut i = 0;
     let (tx, rx) = mpsc::channel();
 
-    let mycallback = move |result: unbound::Result<unbound::Answer>| {
+    let mycallback = move |_: unbound::AsyncID, result: unbound::Result<unbound::Answer>| {
         match result {
             Err(err) => println!("resolve error: {}", err),
             Ok(ans) => {
