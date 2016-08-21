@@ -4,6 +4,8 @@ use std::thread;
 
 extern crate unbound;
 
+mod util;
+
 fn main() {
     let ctx = Arc::new(unbound::Context::new().unwrap());
     if let Err(err) = ctx.resolvconf_path("/etc/resolv.conf") {
@@ -22,15 +24,8 @@ fn main() {
             match ctx.resolve(&name, 1, 1) {
                 Err(err) => println!("thread {} - error resolving {}: {}", i, name, err),
                 Ok(ans) => {
-                    for data in ans.datas() {
-                        assert_eq!(data.len(), 4);
-                        println!("thread {} -  address of {} is {}.{}.{}.{}",
-                                 i,
-                                 name,
-                                 data[0],
-                                 data[1],
-                                 data[2],
-                                 data[3]);
+                    for ip in ans.datas().map(util::data_to_ipv4) {
+                        println!("thread {} -  address of {} is {}", i, name, ip);
                     }
                 }
             }

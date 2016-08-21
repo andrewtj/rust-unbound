@@ -5,6 +5,8 @@ use std::time::Duration;
 
 extern crate unbound;
 
+mod util;
+
 fn main() {
     let ctx = unbound::Context::new().unwrap();
     let mut i = 0;
@@ -14,14 +16,8 @@ fn main() {
         match result {
             Err(err) => println!("resolve error: {}", err),
             Ok(ans) => {
-                for data in ans.datas() {
-                    assert_eq!(data.len(), 4);
-                    println!("The address of {} is {}.{}.{}.{}",
-                             ans.qname(),
-                             data[0],
-                             data[1],
-                             data[2],
-                             data[3]);
+                for ip in ans.datas().map(util::data_to_ipv4) {
+                    println!("The address of {} is {}", ans.qname(), ip);
                 }
                 tx.send(true).unwrap();
             }

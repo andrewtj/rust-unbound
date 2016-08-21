@@ -1,6 +1,8 @@
 use std::process::exit;
 extern crate unbound;
 
+mod util;
+
 fn main() {
     let ctx = unbound::Context::new().unwrap();
     if let Err(err) = ctx.resolvconf_path("/etc/resolv.conf") {
@@ -21,13 +23,8 @@ fn main() {
             exit(1)
         }
         Ok(ans) => {
-            for data in ans.datas() {
-                assert_eq!(data.len(), 4);
-                println!("The address is {}.{}.{}.{}",
-                         data[0],
-                         data[1],
-                         data[2],
-                         data[3]);
+            for ip in ans.datas().map(util::data_to_ipv4) {
+                println!("The address is {}", ip);
             }
             if ans.secure() {
                 println!("Result is secure")
