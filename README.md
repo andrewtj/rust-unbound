@@ -19,5 +19,4 @@ to provide.
 The following environment variables influence the build process:
 
 * `UNBOUND_STATIC`- If specified libunbound will be linked statically.
-* `UNBOUND_INCLUDE_DIR` - Sets where libunbound headers can be found.
-* `UNBOUND_LIB_DIR` - Sets where libunbound libraries may be found.
+* `UNBOUND_DIR` - Directory in which libunbound's `include` and `lib` folders may be found.
