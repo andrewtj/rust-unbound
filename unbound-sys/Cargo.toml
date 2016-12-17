@@ -13,3 +13,6 @@ links = "unbound"
 [dependencies]
 openssl = "0.9"
 libc = "0.2"
+
+[build-dependencies]
+libbindgen = "0.1"

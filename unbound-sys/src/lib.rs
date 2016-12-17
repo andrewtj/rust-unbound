@@ -1,12 +1,10 @@
-
-pub use sys::*;
+#![allow(non_camel_case_types)]
 
 extern crate libc;
 extern crate openssl;
 
-#[allow(non_camel_case_types)]
-mod sys;
-
 pub fn init() {
     openssl::init();
 }
+
+include!(concat!(env!("OUT_DIR"), "/bindings.rs"));

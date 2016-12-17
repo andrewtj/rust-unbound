@@ -11,15 +11,16 @@
 //! * `ub_result` is wrapped by [Answer](struct.Answer.html). Methods on
 //! [Answer](struct.Answer.html) are used to safely access the fields of `ub_result`.
 //!
+extern crate libc;
+extern crate unbound_sys as sys;
+
 use std::collections::HashMap;
 use std::ffi::{CStr, CString, NulError};
 use std::{fmt, mem, ptr};
 use std::sync::Mutex;
 use std::path::Path;
-use std::os::raw::c_void;
 
-extern crate libc;
-extern crate unbound_sys as sys;
+use libc::{c_char, c_int, c_void};
 
 /// Common Result type for operations.
 pub type Result<T> = std::result::Result<T, Error>;
@@ -30,7 +31,7 @@ pub enum Error {
     /// Argument contained a null byte
     NullByte,
     /// A libunbound error
-    UB(libc::c_int),
+    UB(c_int),
     /// Argument contained invalid UTF8
     UTF8,
 }
@@ -100,7 +101,7 @@ impl Answer {
     pub fn datas(&self) -> Datas {
         Datas {
             index: 0,
-            answer: &self,
+            answer: self,
         }
     }
     /// Returns canonical name of result, if any.
@@ -238,11 +239,11 @@ impl Context {
     pub fn get_option(&self, opt: &str) -> Result<String> {
         let opt = try!(CString::new(opt));
         unsafe {
-            let mut result: *mut libc::c_char = ptr::null_mut();
+            let mut result: *mut c_char = ptr::null_mut();
             try!(into_result!(sys::ub_ctx_get_option(self.ub_ctx, opt.as_ptr(), &mut result)));
             // Assume values are always ASCII
             let val = CStr::from_ptr(result).to_str().unwrap().to_owned();
-            libc::free(result as *mut libc::c_void);
+            libc::free(result as *mut c_void);
             Ok(val)
         }
     }
@@ -299,12 +300,12 @@ impl Context {
         unsafe { into_result!(sys::ub_ctx_debugout(self.ub_ctx, out as *mut _)) }
     }
     /// Wraps `ub_ctx_debuglevel`.
-    pub fn debuglevel(&self, d: libc::c_int) -> Result<()> {
+    pub fn debuglevel(&self, d: c_int) -> Result<()> {
         unsafe { into_result!(sys::ub_ctx_debuglevel(self.ub_ctx, d)) }
     }
     /// Wraps `ub_ctx_async`.
     pub fn async(&self, dothread: bool) -> Result<()> {
-        unsafe { into_result!(sys::ub_ctx_async(self.ub_ctx, dothread as libc::c_int)) }
+        unsafe { into_result!(sys::ub_ctx_async(self.ub_ctx, dothread as c_int)) }
     }
     /// Wraps `ub_poll`.
     pub fn poll(&self) -> bool {
@@ -337,7 +338,7 @@ impl Context {
         }
     }
     /// Wraps `ub_fd`.
-    pub fn fd(&self) -> libc::c_int {
+    pub fn fd(&self) -> c_int {
         unsafe { sys::ub_fd(self.ub_ctx) }
     }
     /// Wraps `process`.
@@ -352,8 +353,8 @@ impl Context {
         unsafe {
             into_result!(sys::ub_resolve(self.ub_ctx,
                                          name.as_ptr(),
-                                         rrtype as libc::c_int,
-                                         class as libc::c_int,
+                                         rrtype as c_int,
+                                         class as c_int,
                                          &mut result),
                          Answer(result))
         }
@@ -375,8 +376,8 @@ impl Context {
         unsafe {
             let result = into_result!(sys::ub_resolve_async(self.ub_ctx,
                                                             name.as_ptr(),
-                                                            rrtype as libc::c_int,
-                                                            class as libc::c_int,
+                                                            rrtype as c_int,
+                                                            class as c_int,
                                                             ctx_raw,
                                                             Some(rust_unbound_callback),
                                                             id_raw),
@@ -433,7 +434,7 @@ impl fmt::Debug for Context {
 }
 
 unsafe extern "C" fn rust_unbound_callback(ctx_raw: *mut c_void,
-                                           error: libc::c_int,
+                                           error: c_int,
                                            result: *mut sys::ub_result) {
     CallbackContext::from_raw(ctx_raw).call_and_remove(into_result!(error, Answer(result)));
 }
@@ -442,15 +443,15 @@ unsafe extern "C" fn rust_unbound_callback(ctx_raw: *mut c_void,
 /// Identifies an asynchronous query.
 // TODO: Copy? .cancel() ?
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct AsyncID(libc::c_int);
+pub struct AsyncID(c_int);
 
-type ContextHashMap = HashMap<libc::c_int, *mut c_void>;
+type ContextHashMap = HashMap<c_int, *mut c_void>;
 
 struct CallbackContext {
     inner: Box<CallbackContextInner>,
 }
 
-struct CallbackContextInner(libc::c_int, *mut ContextHashMap, Box<Fn(AsyncID, Result<Answer>)>);
+struct CallbackContextInner(c_int, *mut ContextHashMap, Box<Fn(AsyncID, Result<Answer>)>);
 
 impl CallbackContext {
     fn new<C>(chm: &mut ContextHashMap, cb: C) -> Self
@@ -465,7 +466,7 @@ impl CallbackContext {
     fn into_raw(self) -> *mut c_void {
         Box::into_raw(self.inner) as *mut c_void
     }
-    fn id_raw(&mut self) -> *mut libc::c_int {
+    fn id_raw(&mut self) -> *mut c_int {
         &mut self.inner.0 as *mut _
     }
     fn call_and_remove(&self, result: Result<Answer>) {
