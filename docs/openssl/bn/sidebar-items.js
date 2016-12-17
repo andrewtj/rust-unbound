@@ -1,1 +1,0 @@
-initSidebarItems({"enum":[["RNGProperty","Specifies the desired properties of a randomly generated `BigNum`."]],"struct":[["BigNum","An owned, signed, arbitrary-precision integer."],["BigNumRef","A borrowed, signed, arbitrary-precision integer."]]});
