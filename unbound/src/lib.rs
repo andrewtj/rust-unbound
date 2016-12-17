@@ -471,7 +471,7 @@ impl CallbackContext {
     }
     fn call_and_remove(&self, result: Result<Answer>) {
         unsafe {
-            mem::transmute::<_, &mut ContextHashMap>(self.inner.1).remove(&self.inner.0);
+            (&mut *self.inner.1).remove(&self.inner.0);
             self.inner.2(AsyncID(self.inner.0), result);
         }
     }
