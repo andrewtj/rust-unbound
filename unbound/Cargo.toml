@@ -1,15 +1,15 @@
 [package]
 name = "unbound"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Andrew Tunnell-Jones <andrew@tj.id.au>"]
 license = "BSD-3-Clause"
-description = "libunbound wrapper"
-documentation = "http://www.andrewtj.org/rust-unbound/unbound/"
+description = "Wraps libunbound; an implementation of a DNS resolver including cache and DNSSEC validation."
+documentation = "https://docs.rs/unbound"
 homepage = "https://github.com/andrewtj/rust-unbound"
 repository = "https://github.com/andrewtj/rust-unbound"
 readme = "../README.md"
 keywords = ["dns", "dnssec"]
 
 [dependencies]
-unbound-sys = { version = "0.2", path = "../unbound-sys" }
+unbound-sys = { version = "0.3", path = "../unbound-sys" }
 libc = "0.2"

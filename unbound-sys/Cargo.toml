@@ -1,9 +1,10 @@
 [package]
 name = "unbound-sys"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Andrew Tunnell-Jones <andrew@tj.id.au>"]
 license = "BSD-3-Clause"
 description = "FFI bindings to libunbound"
+documentation = "https://docs.rs/unbound-sys"
 homepage = "https://github.com/andrewtj/rust-unbound"
 repository = "https://github.com/andrewtj/rust-unbound"
 readme = "../README.md"
