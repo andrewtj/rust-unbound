@@ -281,6 +281,7 @@ impl Context {
         unsafe { into_result!(sys::ub_ctx_add_ta(self.ub_ctx, ta.as_ptr())) }
     }
     /// Wraps `ub_ctx_add_ta_autr`.
+    #[cfg(ub_ctx_add_ta_autr)]
     pub fn add_ta_autr<P: AsRef<Path>>(&self, fname: P) -> Result<()> {
         let fname = try!(path_to_cstring(fname.as_ref()));
         unsafe { into_result!(sys::ub_ctx_add_ta_autr(self.ub_ctx, fname.as_ptr())) }
@@ -379,7 +380,7 @@ impl Context {
                                                             rrtype as c_int,
                                                             class as c_int,
                                                             ctx_raw,
-                                                            Some(rust_unbound_callback),
+                                                            rust_unbound_callback,
                                                             id_raw),
                                       AsyncID(*id_raw));
             if result.is_ok() {

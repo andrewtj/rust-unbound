@@ -8,8 +8,13 @@ documentation = "https://docs.rs/unbound"
 homepage = "https://github.com/andrewtj/rust-unbound"
 repository = "https://github.com/andrewtj/rust-unbound"
 readme = "../README.md"
+build = "../support/build.rs"
 keywords = ["dns", "dnssec"]
 
 [dependencies]
 unbound-sys = { version = "0.3", path = "../unbound-sys" }
 libc = "0.2"
+
+[build-dependencies]
+tempdir = "0.3.5"
+gcc = "0.3.41"
