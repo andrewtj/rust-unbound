@@ -204,10 +204,33 @@ impl<'a> std::iter::Iterator for Datas<'a> {
     }
 }
 
+type ResultVec = Vec<(AsyncID, Result<Answer>)>;
+type CallbackContext = (AsyncID, *mut ResultVec);
+
 /// Wraps `ub_ctx`.
 pub struct Context {
     ub_ctx: *mut sys::ub_ctx,
-    callbacks: Mutex<ContextHashMap>,
+    protected: Mutex<ContextProtected>,
+}
+
+#[derive(Default)]
+struct ContextProtected {
+    callbacks: HashMap<AsyncID, Box<Fn(AsyncID, Result<Answer>) + 'static>>,
+    results: ResultVec,
+}
+
+impl ContextProtected {
+    fn adjust_capacity(&mut self) {
+        let results_reserve = self.callbacks.len();
+        let results_min = self.results.len() + results_reserve;
+        if self.results.capacity() > results_min * 10 {
+            self.results.shrink_to_fit();
+            self.results.reserve(results_reserve);
+        }
+        if self.callbacks.capacity() > self.callbacks.len() * 10 {
+            self.callbacks.shrink_to_fit();
+        }
+    }
 }
 
 // TODO: move this somewhere more appropriate.
@@ -225,7 +248,7 @@ impl Context {
         } else {
             Ok(Context {
                 ub_ctx: ctx,
-                callbacks: Mutex::new(ContextHashMap::new()),
+                protected: Mutex::new(Default::default()),
             })
         }
     }
@@ -314,12 +337,11 @@ impl Context {
     }
     /// Indicates whether there are any unprocessed asynchronous queries remaining.
     pub fn have_waiting(&self) -> bool {
-        !self.callbacks.lock().unwrap().is_empty()
+        !self.protected.lock().expect("have_waiting acquire protected").callbacks.is_empty()
     }
     /// Reimplements `ub_wait`.
     pub fn wait(&self) -> Result<()> {
         unsafe {
-            let _ = sys::ub_wait; // Reimplemented to go through self.process (and the lock)
             let mut set: libc::fd_set = mem::uninitialized();
             let fd = self.fd();
             libc::FD_ZERO(&mut set);
@@ -344,8 +366,28 @@ impl Context {
     }
     /// Wraps `process`.
     pub fn process(&self) -> Result<()> {
-        let _ = self.callbacks.lock().unwrap();
-        unsafe { into_result!(sys::ub_process(self.ub_ctx)) }
+        {
+            let _ = self.protected.lock().expect("process acquire protected for ub_process");
+            try!(unsafe { into_result!(sys::ub_process(self.ub_ctx)) });
+        }
+        loop {
+            let (callback, id, result) = {
+                let mut p = self.protected
+                    .lock()
+                    .expect("process acquire protected for invoking callbacks");
+                if let Some((id, result)) = p.results.pop() {
+                    if let Some(callback) = p.callbacks.remove(&id) {
+                        (callback, id, result)
+                    } else {
+                        continue;
+                    }
+                } else {
+                    p.adjust_capacity();
+                    return Ok(());
+                }
+            };
+            callback(id, result)
+        }
     }
     /// Wraps `ub_resolve`.
     pub fn resolve(&self, name: &str, rrtype: u16, class: u16) -> Result<Answer> {
@@ -370,34 +412,43 @@ impl Context {
         where C: Fn(AsyncID, Result<Answer>) + 'static
     {
         let name = try!(CString::new(name));
-        let mut hm = self.callbacks.lock().unwrap();
-        let mut ctx = CallbackContext::new(&mut hm, callback);
-        let id_raw = ctx.id_raw();
-        let ctx_raw = ctx.into_raw();
+        // TODO: check callback id is unique?
         unsafe {
-            let result = into_result!(sys::ub_resolve_async(self.ub_ctx,
-                                                            name.as_ptr(),
-                                                            rrtype as c_int,
-                                                            class as c_int,
-                                                            ctx_raw,
-                                                            rust_unbound_callback,
-                                                            id_raw),
-                                      AsyncID(*id_raw));
-            if result.is_ok() {
-                hm.insert(*id_raw, ctx_raw);
+            let mut p = self.protected.lock().expect("resolve_async acquire protected");
+            let (id_raw, context_raw): (*mut AsyncID, *mut CallbackContext) = {
+                let mut context = Box::new((AsyncID(0), &mut p.results as *mut _));
+                (&mut context.0 as *mut _, Box::into_raw(context))
+            };
+            let r = into_result!(sys::ub_resolve_async(self.ub_ctx,
+                                                       name.as_ptr(),
+                                                       rrtype as c_int,
+                                                       class as c_int,
+                                                       context_raw as *mut c_void,
+                                                       rust_unbound_callback,
+                                                       id_raw as *mut c_int),
+                                 *id_raw);
+            if r.is_ok() {
+                p.callbacks.insert(*id_raw, Box::new(callback));
+                p.adjust_capacity();
             } else {
-                drop(CallbackContext::from_raw(ctx_raw));
+                let _: Box<CallbackContext> = Box::from_raw(context_raw);
             }
-            result
+            r
         }
     }
     /// Wraps `ub_cancel`.
     pub fn cancel(&self, id: AsyncID) {
-        let mut hm = self.callbacks.lock().unwrap();
-        if let Some(ctx_raw) = hm.remove(&id.0) {
+        let mut p = self.protected.lock().expect("cancel acquire protected");
+        if p.callbacks.remove(&id).is_some() {
             unsafe {
-                assert_eq!(sys::ub_cancel(self.ub_ctx, id.0), 0);
-                drop(CallbackContext::from_raw(ctx_raw));
+                sys::ub_cancel(self.ub_ctx, id.0);
+                for i in 0..p.results.len() {
+                    if p.results[i].0 == id {
+                        p.results.swap_remove(i);
+                        p.adjust_capacity();
+                        return;
+                    }
+                }
             }
         }
     }
@@ -437,46 +488,15 @@ impl fmt::Debug for Context {
 unsafe extern "C" fn rust_unbound_callback(ctx_raw: *mut c_void,
                                            error: c_int,
                                            result: *mut sys::ub_result) {
-    CallbackContext::from_raw(ctx_raw).call_and_remove(into_result!(error, Answer(result)));
+    // The results Vec should always have capacity so this should never panic
+    let ctx = Box::from_raw(ctx_raw as *mut CallbackContext);
+    (*ctx.1).push((ctx.0, into_result!(error, Answer(result))));
 }
 
 
 /// Identifies an asynchronous query.
-// TODO: Copy? .cancel() ?
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct AsyncID(c_int);
-
-type ContextHashMap = HashMap<c_int, *mut c_void>;
-
-struct CallbackContext {
-    inner: Box<CallbackContextInner>,
-}
-
-struct CallbackContextInner(c_int, *mut ContextHashMap, Box<Fn(AsyncID, Result<Answer>)>);
-
-impl CallbackContext {
-    fn new<C>(chm: &mut ContextHashMap, cb: C) -> Self
-        where C: 'static + Fn(AsyncID, Result<Answer>)
-    {
-        let inner = CallbackContextInner(0, chm, Box::new(cb));
-        CallbackContext { inner: Box::new(inner) }
-    }
-    unsafe fn from_raw(raw: *mut c_void) -> Self {
-        CallbackContext { inner: Box::from_raw(raw as *mut CallbackContextInner) }
-    }
-    fn into_raw(self) -> *mut c_void {
-        Box::into_raw(self.inner) as *mut c_void
-    }
-    fn id_raw(&mut self) -> *mut c_int {
-        &mut self.inner.0 as *mut _
-    }
-    fn call_and_remove(&self, result: Result<Answer>) {
-        unsafe {
-            (&mut *self.inner.1).remove(&self.inner.0);
-            self.inner.2(AsyncID(self.inner.0), result);
-        }
-    }
-}
 
 unsafe impl Sync for Context {}
 unsafe impl Send for Context {}
@@ -485,9 +505,6 @@ impl Drop for Context {
     fn drop(&mut self) {
         unsafe {
             sys::ub_ctx_delete(self.ub_ctx);
-            for &ctx_raw in self.callbacks.lock().unwrap().values() {
-                drop(CallbackContext::from_raw(ctx_raw));
-            }
         }
     }
 }
