@@ -24,6 +24,8 @@ use std::path::Path;
 
 use libc::{c_char, c_int, c_void};
 
+const IP_CSTR_MAX: usize = 40;
+
 /// Common Result type for operations.
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -238,31 +240,6 @@ impl ContextProtected {
             self.callbacks.shrink_to_fit();
         }
     }
-}
-
-// TODO: move this somewhere more appropriate.
-fn path_to_cstring(path: &Path) -> Result<CString> {
-    Ok(try!(CString::new(try!(path.to_str().ok_or(Error::UTF8)))))
-}
-
-const IP_CSTR_MAX: usize = 40;
-
-fn ipv4_to_cstr<'a>(ip: &net::Ipv4Addr, buf: &'a mut [u8; IP_CSTR_MAX]) -> &'a CStr {
-    let len = {
-        let mut w = io::BufWriter::new(&mut buf[..]);
-        w.write_fmt(format_args!("{}", &ip)).expect("write_fmt ipv4");
-        IP_CSTR_MAX + 1 - w.into_inner().expect("into_inner ipv4").len()
-    };
-    CStr::from_bytes_with_nul(&buf[..len]).expect("valid ipv4 c str")
-}
-
-fn ipv6_to_cstr<'a>(ip: &net::Ipv6Addr, buf: &'a mut [u8; IP_CSTR_MAX]) -> &'a CStr {
-    let len = {
-        let mut w = io::BufWriter::new(&mut buf[..]);
-        w.write_fmt(format_args!("{}", &ip)).expect("write_fmt ipv6");
-        IP_CSTR_MAX + 1 - w.into_inner().expect("into_inner ipv6").len()
-    };
-    CStr::from_bytes_with_nul(&buf[..len]).expect("valid ipv6 c str")
 }
 
 impl Context {
@@ -561,6 +538,28 @@ impl Drop for Context {
 /// Wraps `ub_version`.
 pub fn version() -> &'static str {
     unsafe { CStr::from_ptr(sys::ub_version()).to_str().unwrap() }
+}
+
+fn path_to_cstring(path: &Path) -> Result<CString> {
+    Ok(try!(CString::new(try!(path.to_str().ok_or(Error::UTF8)))))
+}
+
+fn ipv4_to_cstr<'a>(ip: &net::Ipv4Addr, buf: &'a mut [u8; IP_CSTR_MAX]) -> &'a CStr {
+    let len = {
+        let mut w = io::BufWriter::new(&mut buf[..]);
+        w.write_fmt(format_args!("{}", &ip)).expect("write_fmt ipv4");
+        IP_CSTR_MAX + 1 - w.into_inner().expect("into_inner ipv4").len()
+    };
+    CStr::from_bytes_with_nul(&buf[..len]).expect("valid ipv4 c str")
+}
+
+fn ipv6_to_cstr<'a>(ip: &net::Ipv6Addr, buf: &'a mut [u8; IP_CSTR_MAX]) -> &'a CStr {
+    let len = {
+        let mut w = io::BufWriter::new(&mut buf[..]);
+        w.write_fmt(format_args!("{}", &ip)).expect("write_fmt ipv6");
+        IP_CSTR_MAX + 1 - w.into_inner().expect("into_inner ipv6").len()
+    };
+    CStr::from_bytes_with_nul(&buf[..len]).expect("valid ipv6 c str")
 }
 
 #[test]
