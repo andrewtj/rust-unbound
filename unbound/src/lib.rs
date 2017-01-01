@@ -1,4 +1,4 @@
-//! Crate unbound wraps [libunbound](https://unbound.nlnetlabs.nl) from
+//! This crate wraps [libunbound](https://unbound.nlnetlabs.nl) from
 //! [NLnet Labs](https://nlnetlabs.nl). libunbound is an implementation of a DNS resolver,
 //! including cache and DNSSEC validation.
 //!
@@ -239,7 +239,7 @@ fn path_to_cstring(path: &Path) -> Result<CString> {
 }
 
 impl Context {
-    /// Attempts to construct a new `Context`.
+    /// Create a new `Context`.
     pub fn new() -> std::result::Result<Context, ()> {
         sys::init();
         let ctx = unsafe { sys::ub_ctx_create() };
@@ -252,13 +252,13 @@ impl Context {
             })
         }
     }
-    /// Wraps `ub_ctx_set_option`.
+    /// Set option `opt` to value `val`.
     pub fn set_option(&self, opt: &str, val: &str) -> Result<()> {
         let opt = try!(CString::new(opt));
         let val = try!(CString::new(val));
         unsafe { into_result!(sys::ub_ctx_set_option(self.ub_ctx, opt.as_ptr(), val.as_ptr())) }
     }
-    /// Wraps `ub_ctx_get_option`.
+    /// Get the value of an option.
     pub fn get_option(&self, opt: &str) -> Result<String> {
         let opt = try!(CString::new(opt));
         unsafe {
@@ -270,68 +270,70 @@ impl Context {
             Ok(val)
         }
     }
-    /// Wraps `ub_ctx_config`.
-    pub fn config<P: AsRef<Path>>(&self, fname: P) -> Result<()> {
-        let fname = try!(path_to_cstring(fname.as_ref()));
-        unsafe { into_result!(sys::ub_ctx_config(self.ub_ctx, fname.as_ptr())) }
+    /// Set configuration from file.
+    pub fn config<P: AsRef<Path>>(&self, path: P) -> Result<()> {
+        let path = try!(path_to_cstring(path.as_ref()));
+        unsafe { into_result!(sys::ub_ctx_config(self.ub_ctx, path.as_ptr())) }
     }
-    /// Wraps `ub_ctx_set_fwd`.
+    }
+    /// Forward queries to IP address `target`.
     pub fn set_fwd(&self, target: &str) -> Result<()> {
         let target = try!(CString::new(target));
         unsafe { into_result!(sys::ub_ctx_set_fwd(self.ub_ctx, target.as_ptr())) }
     }
-    /// Wraps `ub_ctx_resolvconf`.
+    /// Read nameservers from /etc/resolv.conf.
     pub fn resolvconf(&self) -> Result<()> {
         unsafe { into_result!(sys::ub_ctx_resolvconf(self.ub_ctx, ptr::null())) }
     }
-    /// Wraps `ub_ctx_resolvconf`.
-    pub fn resolvconf_path<P: AsRef<Path>>(&self, fname: P) -> Result<()> {
-        let fname = try!(path_to_cstring(fname.as_ref()));
-        unsafe { into_result!(sys::ub_ctx_resolvconf(self.ub_ctx, fname.as_ptr())) }
+    /// Read nameservers from a file.
+    pub fn resolvconf_path<P: AsRef<Path>>(&self, path: P) -> Result<()> {
+        let path = try!(path_to_cstring(path.as_ref()));
+        unsafe { into_result!(sys::ub_ctx_resolvconf(self.ub_ctx, path.as_ptr())) }
     }
-    /// Wraps `ub_ctx_hosts`.
+    /// Read hosts from /etc/hosts.
     pub fn hosts(&self) -> Result<()> {
         unsafe { into_result!(sys::ub_ctx_hosts(self.ub_ctx, ptr::null())) }
     }
-    /// Wraps `ub_ctx_hosts`.
-    pub fn hosts_path<P: AsRef<Path>>(&self, fname: P) -> Result<()> {
-        let fname = try!(path_to_cstring(fname.as_ref()));
-        unsafe { into_result!(sys::ub_ctx_hosts(self.ub_ctx, fname.as_ptr())) }
+    /// Read hosts from a file.
+    pub fn hosts_path<P: AsRef<Path>>(&self, path: P) -> Result<()> {
+        let path = try!(path_to_cstring(path.as_ref()));
+        unsafe { into_result!(sys::ub_ctx_hosts(self.ub_ctx, path.as_ptr())) }
     }
-    /// Wraps `ub_ctx_add_ta`.
+    /// Add a single line string containing a valid DNSKEY or DS RR as a trust anchor.
     pub fn add_ta(&self, ta: &str) -> Result<()> {
         let ta = try!(CString::new(ta));
         unsafe { into_result!(sys::ub_ctx_add_ta(self.ub_ctx, ta.as_ptr())) }
     }
-    /// Wraps `ub_ctx_add_ta_autr`.
+    /// Add a trust anchor that is updated automatically in line with
+    /// [RFC 5011](https://tools.ietf.org/html/rfc5011).
     #[cfg(ub_ctx_add_ta_autr)]
-    pub fn add_ta_autr<P: AsRef<Path>>(&self, fname: P) -> Result<()> {
-        let fname = try!(path_to_cstring(fname.as_ref()));
-        unsafe { into_result!(sys::ub_ctx_add_ta_autr(self.ub_ctx, fname.as_ptr())) }
+    pub fn add_ta_autr<P: AsRef<Path>>(&self, path: P) -> Result<()> {
+        let path = try!(path_to_cstring(path.as_ref()));
+        unsafe { into_result!(sys::ub_ctx_add_ta_autr(self.ub_ctx, path.as_ptr())) }
     }
-    /// Wraps `ub_ctx_add_ta_file`.
-    pub fn add_ta_file<P: AsRef<Path>>(&self, fname: P) -> Result<()> {
-        let fname = try!(path_to_cstring(fname.as_ref()));
-        unsafe { into_result!(sys::ub_ctx_add_ta_file(self.ub_ctx, fname.as_ptr())) }
+    /// Add trust anchors from a file containing DS and DNSKEY records.
+    pub fn add_ta_file<P: AsRef<Path>>(&self, path: P) -> Result<()> {
+        let path = try!(path_to_cstring(path.as_ref()));
+        unsafe { into_result!(sys::ub_ctx_add_ta_file(self.ub_ctx, path.as_ptr())) }
     }
-    /// Wraps `ub_ctx_trustedkeys`.
-    pub fn trustedkeys<P: AsRef<Path>>(&self, fname: P) -> Result<()> {
-        let fname = try!(path_to_cstring(fname.as_ref()));
-        unsafe { into_result!(sys::ub_ctx_trustedkeys(self.ub_ctx, fname.as_ptr())) }
+    /// Add trust anchors from a BIND-style configuration file.
+    pub fn trustedkeys<P: AsRef<Path>>(&self, path: P) -> Result<()> {
+        let path = try!(path_to_cstring(path.as_ref()));
+        unsafe { into_result!(sys::ub_ctx_trustedkeys(self.ub_ctx, path.as_ptr())) }
     }
-    /// Wraps `ub_ctx_debugout`.
+    /// Set debug and error output to the specified stream.
     pub fn debugout(&self, out: *mut libc::FILE) -> Result<()> {
         unsafe { into_result!(sys::ub_ctx_debugout(self.ub_ctx, out as *mut _)) }
     }
-    /// Wraps `ub_ctx_debuglevel`.
+    /// Set debug verbosity. 0 is off, 1 is very minimal, 2 is detailed, and 3 is lots.
     pub fn debuglevel(&self, d: c_int) -> Result<()> {
         unsafe { into_result!(sys::ub_ctx_debuglevel(self.ub_ctx, d)) }
     }
-    /// Wraps `ub_ctx_async`.
+    /// Set asynchronous behaviour. True for threading, false for fork.
     pub fn async(&self, dothread: bool) -> Result<()> {
         unsafe { into_result!(sys::ub_ctx_async(self.ub_ctx, dothread as c_int)) }
     }
-    /// Wraps `ub_poll`.
+    /// Indicates whether new results are pending.
     pub fn poll(&self) -> bool {
         unsafe { sys::ub_poll(self.ub_ctx) != 0 }
     }
@@ -339,7 +341,7 @@ impl Context {
     pub fn have_waiting(&self) -> bool {
         !self.protected.lock().expect("have_waiting acquire protected").callbacks.is_empty()
     }
-    /// Reimplements `ub_wait`.
+    /// Waits for outstanding queries to complete and calls `self.process()`.
     pub fn wait(&self) -> Result<()> {
         unsafe {
             let mut set: libc::fd_set = mem::uninitialized();
@@ -360,11 +362,12 @@ impl Context {
             Ok(())
         }
     }
-    /// Wraps `ub_fd`.
+    /// Returns a file descriptor that is readable when one or more answers are ready.
+    /// Valid for the life of the `Context`.
     pub fn fd(&self) -> c_int {
         unsafe { sys::ub_fd(self.ub_ctx) }
     }
-    /// Wraps `process`.
+    /// Process results from the resolver (when `fd` is readable).
     pub fn process(&self) -> Result<()> {
         {
             let _ = self.protected.lock().expect("process acquire protected for ub_process");
@@ -389,7 +392,7 @@ impl Context {
             callback(id, result)
         }
     }
-    /// Wraps `ub_resolve`.
+    /// Resolve and validate a query.
     pub fn resolve(&self, name: &str, rrtype: u16, class: u16) -> Result<Answer> {
         let mut result: *mut sys::ub_result = ptr::null_mut();
         let name = try!(CString::new(name));
@@ -402,7 +405,9 @@ impl Context {
                          Answer(result))
         }
     }
-    /// Wraps `ub_resolve_async`.
+    /// Resolve and validate a query asynchronously.
+    /// Cancel the query by supplying the `AsyncID` to `cancel`.
+    /// See also `fd`, `poll` and `process`.
     pub fn resolve_async<C>(&self,
                             name: &str,
                             rrtype: u16,
@@ -436,7 +441,7 @@ impl Context {
             r
         }
     }
-    /// Wraps `ub_cancel`.
+    /// Cancel an asynchronous query.
     pub fn cancel(&self, id: AsyncID) {
         let mut p = self.protected.lock().expect("cancel acquire protected");
         if p.callbacks.remove(&id).is_some() {
@@ -452,29 +457,29 @@ impl Context {
             }
         }
     }
-    /// Wraps `ub_ctx_print_local_zones`.
+    /// Print the local zone information to debug output.
     pub fn print_local_zones(&self) -> Result<()> {
         unsafe { into_result!(sys::ub_ctx_print_local_zones(self.ub_ctx)) }
     }
-    /// Wraps `ub_ctx_zone_add`.
+    /// Add or update the zone `zone_name` as type `zone_type`.
     pub fn zone_add(&self, zone_name: &str, zone_type: &str) -> Result<()> {
         let n = try!(CString::new(zone_name));
         let t = try!(CString::new(zone_type));
         unsafe { into_result!(sys::ub_ctx_zone_add(self.ub_ctx, n.as_ptr(), t.as_ptr())) }
     }
-    /// Wraps `ub_ctx_zone_remove`.
+    /// Remove the zone `zone_name`.
     pub fn zone_remove(&self, zone_name: &str) -> Result<()> {
         let n = try!(CString::new(zone_name));
         unsafe { into_result!(sys::ub_ctx_zone_remove(self.ub_ctx, n.as_ptr())) }
     }
-    /// Wraps `ub_ctx_data_add`.
+    /// Add a DNS record.
     pub fn data_add(&self, data: &str) -> Result<()> {
         let data = try!(CString::new(data));
         unsafe { into_result!(sys::ub_ctx_data_add(self.ub_ctx, data.as_ptr())) }
     }
-    /// Wraps `ub_ctx_data_remove`.
-    pub fn data_remove(&self, data: &str) -> Result<()> {
-        let data = try!(CString::new(data));
+    /// Delete data (inserted by `data_add`) from `name`.
+    pub fn data_remove(&self, name: &str) -> Result<()> {
+        let data = try!(CString::new(name));
         unsafe { into_result!(sys::ub_ctx_data_remove(self.ub_ctx, data.as_ptr())) }
     }
 }
