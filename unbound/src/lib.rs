@@ -461,7 +461,6 @@ impl Context {
         where C: Fn(AsyncID, Result<Answer>) + 'static
     {
         let name = try!(CString::new(name));
-        // TODO: check callback id is unique?
         unsafe {
             let mut p = self.protected.lock().expect("resolve_async acquire protected");
             let (id_raw, context_raw): (*mut AsyncID, *mut CallbackContext) = {
@@ -477,7 +476,8 @@ impl Context {
                                                        id_raw as *mut c_int),
                                  *id_raw);
             if r.is_ok() {
-                p.callbacks.insert(*id_raw, Box::new(callback));
+                assert!(p.callbacks.insert(*id_raw, Box::new(callback)).is_none(),
+                        "ids are expected to be unique");
                 p.adjust_capacity();
             } else {
                 let _: Box<CallbackContext> = Box::from_raw(context_raw);
