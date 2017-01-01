@@ -14,9 +14,11 @@
 extern crate libc;
 extern crate unbound_sys as sys;
 
+use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::ffi::{CStr, CString, NulError};
-use std::{fmt, mem, ptr};
+use std::io::{self, Write};
+use std::{fmt, net, mem, ptr};
 use std::sync::Mutex;
 use std::path::Path;
 
@@ -243,6 +245,26 @@ fn path_to_cstring(path: &Path) -> Result<CString> {
     Ok(try!(CString::new(try!(path.to_str().ok_or(Error::UTF8)))))
 }
 
+const IP_CSTR_MAX: usize = 40;
+
+fn ipv4_to_cstr<'a>(ip: &net::Ipv4Addr, buf: &'a mut [u8; IP_CSTR_MAX]) -> &'a CStr {
+    let len = {
+        let mut w = io::BufWriter::new(&mut buf[..]);
+        w.write_fmt(format_args!("{}", &ip)).expect("write_fmt ipv4");
+        IP_CSTR_MAX + 1 - w.into_inner().expect("into_inner ipv4").len()
+    };
+    CStr::from_bytes_with_nul(&buf[..len]).expect("valid ipv4 c str")
+}
+
+fn ipv6_to_cstr<'a>(ip: &net::Ipv6Addr, buf: &'a mut [u8; IP_CSTR_MAX]) -> &'a CStr {
+    let len = {
+        let mut w = io::BufWriter::new(&mut buf[..]);
+        w.write_fmt(format_args!("{}", &ip)).expect("write_fmt ipv6");
+        IP_CSTR_MAX + 1 - w.into_inner().expect("into_inner ipv6").len()
+    };
+    CStr::from_bytes_with_nul(&buf[..len]).expect("valid ipv6 c str")
+}
+
 impl Context {
     /// Create a new `Context`.
     pub fn new() -> std::result::Result<Context, ()> {
@@ -280,10 +302,23 @@ impl Context {
         let path = try!(path_to_cstring(path.as_ref()));
         unsafe { into_result!(sys::ub_ctx_config(self.ub_ctx, path.as_ptr())) }
     }
+    /// Forward queries to host.
+    pub fn set_fwd<T: Borrow<net::IpAddr>>(&self, ip: T) -> Result<()> {
+        match ip.borrow() {
+            &net::IpAddr::V4(ref ip) => self.set_fwd4(ip),
+            &net::IpAddr::V6(ref ip) => self.set_fwd6(ip),
+        }
     }
-    /// Forward queries to IP address `target`.
-    pub fn set_fwd(&self, target: &str) -> Result<()> {
-        let target = try!(CString::new(target));
+    /// Forward queries to an IPv4 host.
+    pub fn set_fwd4<T: Borrow<net::Ipv4Addr>>(&self, ip: T) -> Result<()> {
+        let mut buf = [0u8; IP_CSTR_MAX];
+        let target = ipv4_to_cstr(ip.borrow(), &mut buf);
+        unsafe { into_result!(sys::ub_ctx_set_fwd(self.ub_ctx, target.as_ptr())) }
+    }
+    /// Forward queries to an IPv6 host.
+    pub fn set_fwd6<T: Borrow<net::Ipv6Addr>>(&self, ip: T) -> Result<()> {
+        let mut buf = [0u8; IP_CSTR_MAX];
+        let target = ipv6_to_cstr(ip.borrow(), &mut buf);
         unsafe { into_result!(sys::ub_ctx_set_fwd(self.ub_ctx, target.as_ptr())) }
     }
     /// Read nameservers from /etc/resolv.conf.
@@ -540,8 +575,7 @@ fn test_ctx_options() {
     assert!(ctx.resolvconf().is_ok());
     assert!(ctx.resolvconf_path("test/google-dns-resolv.conf").is_ok());
     assert!(ctx.resolvconf_path("test/no-such-file").is_err());
-    assert!(ctx.set_fwd("8.8.8.8").is_ok());
-    assert!(ctx.set_fwd("!").is_err());
+    assert!(ctx.set_fwd4(net::Ipv4Addr::new(8, 8, 8, 8)).is_ok());
     assert!(ctx.hosts().is_ok());
     assert!(ctx.hosts_path("test/empty").is_ok());
     assert!(ctx.hosts_path("test/no-such-file").is_err());
