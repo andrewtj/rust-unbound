@@ -26,7 +26,6 @@ use libc::{c_char, c_int, c_void};
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// Common Error type for operations.
-#[derive(Debug)]
 pub enum Error {
     /// Argument contained a null byte
     NullByte,
@@ -49,6 +48,12 @@ impl Error {
             }
             Error::UTF8 => "argument is invalid UTF-8",
         }
+    }
+}
+
+impl fmt::Debug for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.as_str().fmt(f)
     }
 }
 
