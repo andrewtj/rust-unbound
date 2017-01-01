@@ -8,7 +8,7 @@ documentation = "https://docs.rs/unbound"
 homepage = "https://github.com/andrewtj/rust-unbound"
 repository = "https://github.com/andrewtj/rust-unbound"
 readme = "../README.md"
-build = "../support/build.rs"
+build = "build.rs"
 keywords = ["dns", "dnssec"]
 
 [dependencies]

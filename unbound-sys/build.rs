@@ -1,3 +1,4 @@
+// This file is duplicated in both unbound-sys and unbound.
 extern crate gcc;
 extern crate tempdir;
 
