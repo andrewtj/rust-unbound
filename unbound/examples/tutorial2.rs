@@ -17,7 +17,7 @@ fn main() {
     match ctx.resolve("www.nlnetlabs.nl", 1, 1) {
         Ok(ans) => {
             if ans.havedata() {
-                for ip in ans.datas().map(util::data_to_ipv4) {
+                for ip in ans.data().map(util::data_to_ipv4) {
                     println!("The address is {}", ip);
                 }
             }

@@ -16,7 +16,7 @@ fn main() {
         match result {
             Err(err) => println!("resolve error: {}", err),
             Ok(ans) => {
-                for ip in ans.datas().map(util::data_to_ipv4) {
+                for ip in ans.data().map(util::data_to_ipv4) {
                     println!("The address of {} is {}", ans.qname(), ip);
                 }
                 tx.send(true).unwrap();

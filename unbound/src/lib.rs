@@ -107,8 +107,8 @@ impl Answer {
         unsafe { (*self.0).qclass as u16 }
     }
     /// Returns an iterator over answer record datas.
-    pub fn datas(&self) -> Datas {
-        Datas {
+    pub fn data(&self) -> DataIter {
+        DataIter {
             index: 0,
             answer: self,
         }
@@ -189,12 +189,12 @@ impl Drop for Answer {
 }
 
 /// An iterator over the datas of an [Answer](struct.Answer.html).
-pub struct Datas<'a> {
+pub struct DataIter<'a> {
     index: isize,
     answer: &'a Answer,
 }
 
-impl<'a> std::iter::Iterator for Datas<'a> {
+impl<'a> std::iter::Iterator for DataIter<'a> {
     type Item = &'a [u8];
     fn next(&mut self) -> Option<&'a [u8]> {
         let item = unsafe {

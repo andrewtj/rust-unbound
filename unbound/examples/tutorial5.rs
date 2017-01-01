@@ -24,7 +24,7 @@ fn main() {
             match ctx.resolve(&name, 1, 1) {
                 Err(err) => println!("thread {} - error resolving {}: {}", i, name, err),
                 Ok(ans) => {
-                    for ip in ans.datas().map(util::data_to_ipv4) {
+                    for ip in ans.data().map(util::data_to_ipv4) {
                         println!("thread {} -  address of {} is {}", i, name, ip);
                     }
                 }

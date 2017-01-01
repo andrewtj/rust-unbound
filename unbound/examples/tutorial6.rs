@@ -23,7 +23,7 @@ fn main() {
             exit(1)
         }
         Ok(ans) => {
-            for ip in ans.datas().map(util::data_to_ipv4) {
+            for ip in ans.data().map(util::data_to_ipv4) {
                 println!("The address is {}", ip);
             }
             if ans.secure() {

@@ -27,7 +27,7 @@ fn examine_result(query: &str, result: &unbound::Answer) {
     }
     println!("DNS rcode: {}", result.rcode());
     let mut i = 0;
-    for data in result.datas() {
+    for data in result.data() {
         println!("result data element {} has length: {}", i, data.len());
         println!("result data element {} is: {:?}", i, data);
         i += 1;
