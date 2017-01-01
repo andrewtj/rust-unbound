@@ -329,9 +329,13 @@ impl Context {
     pub fn debuglevel(&self, d: c_int) -> Result<()> {
         unsafe { into_result!(sys::ub_ctx_debuglevel(self.ub_ctx, d)) }
     }
-    /// Set asynchronous behaviour. True for threading, false for fork.
-    pub fn async(&self, dothread: bool) -> Result<()> {
-        unsafe { into_result!(sys::ub_ctx_async(self.ub_ctx, dothread as c_int)) }
+    /// Do asynchronous resolution in a fork.
+    pub fn async_via_fork(&self) -> Result<()> {
+        unsafe { into_result!(sys::ub_ctx_async(self.ub_ctx, false as _)) }
+    }
+    /// Do asynchronous resolution on a new thread.
+    pub fn async_via_thread(&self) -> Result<()> {
+        unsafe { into_result!(sys::ub_ctx_async(self.ub_ctx, true as _)) }
     }
     /// Indicates whether new results are pending.
     pub fn poll(&self) -> bool {
