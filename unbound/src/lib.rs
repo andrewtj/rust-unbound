@@ -281,6 +281,7 @@ impl Context {
     }
     // TODO: add test covering this, and for every other option
     /// Stub a zone to a host.
+    #[cfg(ub_ctx_set_stub)]
     pub fn set_stub<T: Borrow<net::IpAddr>>(&self, zone: &str, ip: T, prime: bool) -> Result<()> {
         match ip.borrow() {
             &net::IpAddr::V4(ref ip) => self.set_stub4(zone, ip, prime),
@@ -288,6 +289,7 @@ impl Context {
         }
     }
     /// Stub a zone to an IPv4 host.
+    #[cfg(ub_ctx_set_stub)]
     pub fn set_stub4<T>(&self, zone: &str, ip: T, prime: bool) -> Result<()>
         where T: Borrow<net::Ipv4Addr>
     {
@@ -296,6 +298,7 @@ impl Context {
         self.set_stub_imp(zone, ip, prime)
     }
     /// Stub a zone to an IPv6 host.
+    #[cfg(ub_ctx_set_stub)]
     pub fn set_stub6<T>(&self, zone: &str, ip: T, prime: bool) -> Result<()>
         where T: Borrow<net::Ipv6Addr>
     {
@@ -303,6 +306,7 @@ impl Context {
         let ip = ipv6_to_cstr(ip.borrow(), &mut buf);
         self.set_stub_imp(zone, ip, prime)
     }
+    #[cfg(ub_ctx_set_stub)]
     fn set_stub_imp(&self, zone: &str, ip: &CStr, prime: bool) -> Result<()> {
         let zone = try!(CString::new(zone));
         unsafe {
@@ -611,6 +615,7 @@ fn test_ctx_options() {
 }
 
 #[test]
+#[cfg(ub_ctx_set_stub)]
 fn test_stub_after_final() {
     let ctx = Context::new().unwrap();
     let addr = net::Ipv4Addr::from([0xDD; 4]);
