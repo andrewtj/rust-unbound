@@ -279,6 +279,36 @@ impl Context {
         let path = try!(path_to_cstring(path.as_ref()));
         unsafe { into_result!(sys::ub_ctx_config(self.ub_ctx, path.as_ptr())) }
     }
+    // TODO: add test covering this, and for every other option
+    /// Stub a zone to a host.
+    pub fn set_stub<T: Borrow<net::IpAddr>>(&self, zone: &str, ip: T, prime: bool) -> Result<()> {
+        match ip.borrow() {
+            &net::IpAddr::V4(ref ip) => self.set_stub4(zone, ip, prime),
+            &net::IpAddr::V6(ref ip) => self.set_stub6(zone, ip, prime),
+        }
+    }
+    /// Stub a zone to an IPv4 host.
+    pub fn set_stub4<T>(&self, zone: &str, ip: T, prime: bool) -> Result<()>
+        where T: Borrow<net::Ipv4Addr>
+    {
+        let mut buf = [0u8; IP_CSTR_MAX];
+        let ip = ipv4_to_cstr(ip.borrow(), &mut buf);
+        self.set_stub_imp(zone, ip, prime)
+    }
+    /// Stub a zone to an IPv6 host.
+    pub fn set_stub6<T>(&self, zone: &str, ip: T, prime: bool) -> Result<()>
+        where T: Borrow<net::Ipv6Addr>
+    {
+        let mut buf = [0u8; IP_CSTR_MAX];
+        let ip = ipv6_to_cstr(ip.borrow(), &mut buf);
+        self.set_stub_imp(zone, ip, prime)
+    }
+    fn set_stub_imp(&self, zone: &str, ip: &CStr, prime: bool) -> Result<()> {
+        let zone = try!(CString::new(zone));
+        unsafe {
+            into_result!(sys::ub_ctx_set_stub(self.ub_ctx, zone.as_ptr(), ip.as_ptr(), prime as _))
+        }
+    }
     /// Forward queries to host.
     pub fn set_fwd<T: Borrow<net::IpAddr>>(&self, ip: T) -> Result<()> {
         match ip.borrow() {
@@ -578,4 +608,15 @@ fn test_ctx_options() {
     assert!(ctx.hosts().is_ok());
     assert!(ctx.hosts_path("test/empty").is_ok());
     assert!(ctx.hosts_path("test/no-such-file").is_err());
+}
+
+#[test]
+fn test_stub_after_final() {
+    let ctx = Context::new().unwrap();
+    let addr = net::Ipv4Addr::from([0xDD; 4]);
+    assert!(ctx.hosts().is_ok());
+    assert!(ctx.set_stub4("example.com.", addr, false).is_ok());
+    assert!(ctx.async_via_thread().is_ok());
+    assert!(ctx.resolve_async("localhost", 1, 1, |_, _| {}).is_ok());
+    assert!(ctx.set_stub4("example.net.", addr, false).is_err());
 }
