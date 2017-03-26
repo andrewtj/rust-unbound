@@ -59,13 +59,8 @@ $bindings =~ s/$ub_callback_expect/$ub_callback_replace/g;
 
 my $ub_ctx_expect = qq {
 #[repr(C)]
-#[derive(Debug, Copy)]
-pub struct ub_ctx {
-    pub _address: u8,
-}
-impl Clone for ub_ctx {
-    fn clone(&self) -> Self { *self }
-}
+#[derive(Debug, Copy, Clone)]
+pub struct ub_ctx([u8; 0]);
 };
 my $ub_ctx_replace = "\npub enum ub_ctx{}\n";
 
@@ -99,40 +94,5 @@ foreach my $s ("ub_ctx_add_ta_autr", "ub_ctx_set_stub") {
     }
     $bindings =~ s/$expect/$replace/;
 }
-
-$bindings =~ s/\@param ([a-z_]+):/\n *  * \`$1\`:/g;
-$bindings =~ s/\@return/\n *  * `return`: /g;
-
-$bindings =~ s/( \* It is called with)\n/$1:\n/g;
-$bindings =~ s/ \* (void .*)/ *\n * \`$1\`\n */;
-$bindings =~ s/ \*\t((?:void\*|int|struct) [a-z_]+)/ *\n *  \`$1\`/g;
-
-my $resolve_doc_expect = qq /
- *  * `callback`: this is called on completion of the resolution.
- * 	It is called as:
- * 	void callback(void* mydata, int err, struct ub_result* result)
- * 	with mydata: the same as passed here, you may pass NULL,
- * 	with err: is 0 when a result has been found.
- * 	with result: a newly allocated result structure.
- *		The result may be NULL, in that case err is set.
-/;
-my $resolve_doc_replace = qq /
- *  * `callback`: this is called on completion of the resolution.
- *  It is called as:
- *
- *  `void callback(void* mydata, int err, struct ub_result* result)`
- *   * `mydata`: the same as passed here, you may pass NULL,
- *   * `err`: is 0 when a result has been found.
- *   * `result`: a newly allocated result structure.
- *
- *  The result may be NULL, in that case err is set.
-/;
-
-if (index($bindings, $resolve_doc_expect) == -1) {
-    die "resolve doc output has changed - bindings:\n$bindings";
-}
-
-$resolve_doc_expect = quotemeta $resolve_doc_expect;
-$bindings =~ s/$resolve_doc_expect/$resolve_doc_replace/g;
 
 print $preamble, $bindings;
