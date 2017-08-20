@@ -7,7 +7,7 @@ description = "FFI bindings to libunbound"
 documentation = "https://docs.rs/unbound-sys"
 homepage = "https://github.com/andrewtj/rust-unbound"
 repository = "https://github.com/andrewtj/rust-unbound"
-readme = "../README.md"
+readme = "README.md"
 build = "build.rs"
 links = "unbound"
 

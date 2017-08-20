@@ -2,21 +2,11 @@
 
 License: [BSD 3-clause](LICENSE)
 
-## Overview
+[libunbound](https://unbound.nlnetlabs.nl) is an implementation of a DNS
+resolver, including cache and DNSSEC validation. Contained here are two Rust
+crates for working with libunbound:
 
-rust-unbound provides unsafe FFI bindings and a safe wrapper for
-[libunbound](https://unbound.nlnetlabs.nl/).
+* [unbound-sys](unbound-sys) provides unsafe wrappers to libunbound
+* [unbound](unbound) implements a safe wrapper atop unbound-sys
 
-* [Documentation](http://www.andrewtj.org/rust-unbound/unbound/)
-* [Examples](unbound/examples)
-
-## Building
-
-rust-unbound wraps libunbound. libunbound depends on OpenSSL which this
-crate relies on [rust-openssl](https://github.com/sfackler/rust-openssl)
-to provide.
-
-The following environment variables influence the build process:
-
-* `UNBOUND_STATIC`- If specified libunbound will be linked statically.
-* `UNBOUND_DIR` - Directory in which libunbound's `include` and `lib` folders may be found.
+Please see their respective READMEs for further information.

@@ -7,7 +7,7 @@ description = "Wraps libunbound; an implementation of a DNS resolver including c
 documentation = "https://docs.rs/unbound"
 homepage = "https://github.com/andrewtj/rust-unbound"
 repository = "https://github.com/andrewtj/rust-unbound"
-readme = "../README.md"
+readme = "README.md"
 build = "build.rs"
 keywords = ["dns", "dnssec"]
 
