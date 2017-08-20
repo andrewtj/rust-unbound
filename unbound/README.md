@@ -5,7 +5,7 @@ resolver, including cache and DNSSEC validation.
 The [interface provided](http://docs.rs/unbound) follows libunbound closely.
 Transliterations of the libunbound
 [tutorials](https://www.unbound.net/documentation/) can be found in
-[examples](examples).
+[examples](https://github.com/andrewtj/rust-unbound/tree/master/unbound/examples).
 
 ### Building
 
