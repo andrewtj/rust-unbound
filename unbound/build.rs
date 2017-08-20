@@ -19,7 +19,7 @@ int main(void) {{
 }}
 "#, s);
     try!(File::create(&main).and_then(|mut f| f.write_all(source.as_bytes())));
-    gcc::Config::new()
+    gcc::Build::new()
         .cargo_metadata(false)
         .get_compiler()
         .to_command()
