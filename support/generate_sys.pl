@@ -28,9 +28,9 @@ close $wrapper_fh;
 # Used servo's bindgen: https://github.com/servo/rust-bindgen
 (my $bind_cmd = qq {
     bindgen \
-    --no-unstable-rust \
     --ctypes-prefix ::libc \
     --generate functions,types \
+    --no-doc-comments \
     $wrapper_filename \
     -- $CFLAGS
 }) =~ s/[\n ]+/ /gm;
@@ -60,7 +60,9 @@ $bindings =~ s/$ub_callback_expect/$ub_callback_replace/g;
 my $ub_ctx_expect = qq {
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
-pub struct ub_ctx([u8; 0]);
+pub struct ub_ctx {
+    _unused: [u8; 0],
+}
 };
 my $ub_ctx_replace = "\npub enum ub_ctx{}\n";
 
