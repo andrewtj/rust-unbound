@@ -31,6 +31,7 @@ close $wrapper_fh;
     --ctypes-prefix ::libc \
     --generate functions,types \
     --no-doc-comments \
+    --no-layout-tests \
     $wrapper_filename \
     -- $CFLAGS
 }) =~ s/[\n ]+/ /gm;
