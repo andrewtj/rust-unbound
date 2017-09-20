@@ -1,5 +1,5 @@
 // This file is duplicated in both unbound-sys and unbound.
-extern crate gcc;
+extern crate cc;
 extern crate tempdir;
 
 use std::env;
@@ -19,7 +19,7 @@ int main(void) {{
 }}
 "#, s);
     try!(File::create(&main).and_then(|mut f| f.write_all(source.as_bytes())));
-    gcc::Build::new()
+    cc::Build::new()
         .cargo_metadata(false)
         .get_compiler()
         .to_command()
