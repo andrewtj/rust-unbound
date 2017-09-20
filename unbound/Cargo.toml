@@ -5,7 +5,6 @@ authors = ["Andrew Tunnell-Jones <andrew@tj.id.au>"]
 license = "BSD-3-Clause"
 description = "Wraps libunbound; an implementation of a DNS resolver including cache and DNSSEC validation."
 documentation = "https://docs.rs/unbound"
-homepage = "https://github.com/andrewtj/rust-unbound"
 repository = "https://github.com/andrewtj/rust-unbound"
 readme = "README.md"
 build = "build.rs"
