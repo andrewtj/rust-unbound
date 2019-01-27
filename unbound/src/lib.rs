@@ -94,6 +94,9 @@ macro_rules! into_result {
 /// Wraps `ub_result`. The result of DNS resolution and validation of a query.
 pub struct Answer(*mut sys::ub_result);
 
+unsafe impl Sync for Answer {}
+unsafe impl Send for Answer {}
+
 impl Drop for Answer {
     fn drop(&mut self) {
         unsafe { sys::ub_resolve_free(self.0) }
