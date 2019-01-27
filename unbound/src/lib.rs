@@ -425,8 +425,9 @@ impl Context {
     /// Process results from the resolver (when `fd` is readable).
     pub fn process(&self) -> Result<()> {
         {
-            let _ = self.protected.lock().expect("process acquire protected for ub_process");
+            let guard = self.protected.lock().expect("process acquire protected for ub_process");
             try!(unsafe { into_result!(sys::ub_process(self.ub_ctx)) });
+            drop(guard);
         }
         loop {
             let (callback, id, result) = {
