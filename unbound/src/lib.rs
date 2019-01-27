@@ -18,9 +18,9 @@ use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::ffi::{CStr, CString, NulError};
 use std::io::{self, Write};
-use std::{fmt, net, mem, ptr};
-use std::sync::Mutex;
 use std::path::Path;
+use std::sync::Mutex;
+use std::{fmt, mem, net, ptr};
 
 use libc::{c_char, c_int, c_void};
 
@@ -80,15 +80,25 @@ impl std::convert::From<NulError> for Error {
 }
 
 macro_rules! into_result {
-    ($err:expr) => (into_result!($err, ()));
-    ($err:expr, $ok:expr) => (match $err {
-        0 => Ok($ok),
-        err => Err(Error::UB(err)),
-    })
+    ($err:expr) => {
+        into_result!($err, ())
+    };
+    ($err:expr, $ok:expr) => {
+        match $err {
+            0 => Ok($ok),
+            err => Err(Error::UB(err)),
+        }
+    };
 }
 
 /// Wraps `ub_result`. The result of DNS resolution and validation of a query.
 pub struct Answer(*mut sys::ub_result);
+
+impl Drop for Answer {
+    fn drop(&mut self) {
+        unsafe { sys::ub_resolve_free(self.0) }
+    }
+}
 
 impl Answer {
     /// Returns original question's name.
@@ -174,17 +184,13 @@ impl Answer {
 
 impl fmt::Debug for Answer {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_fmt(format_args!("Answer({:p}/{}/{}/{})",
-                                 self,
-                                 self.qname(),
-                                 self.qtype(),
-                                 self.qclass()))
-    }
-}
-
-impl Drop for Answer {
-    fn drop(&mut self) {
-        unsafe { sys::ub_resolve_free(self.0) }
+        f.write_fmt(format_args!(
+            "Answer({:p}/{}/{}/{})",
+            self,
+            self.qname(),
+            self.qtype(),
+            self.qclass()
+        ))
     }
 }
 
@@ -222,22 +228,13 @@ pub struct Context {
     protected: Mutex<ContextProtected>,
 }
 
-#[derive(Default)]
-struct ContextProtected {
-    callbacks: HashMap<AsyncID, Box<Fn(AsyncID, Result<Answer>) + 'static>>,
-    results: ResultVec,
-}
+unsafe impl Sync for Context {}
+unsafe impl Send for Context {}
 
-impl ContextProtected {
-    fn adjust_capacity(&mut self) {
-        let results_reserve = self.callbacks.len();
-        let results_min = self.results.len() + results_reserve;
-        if self.results.capacity() > results_min * 10 {
-            self.results.shrink_to_fit();
-            self.results.reserve(results_reserve);
-        }
-        if self.callbacks.capacity() > self.callbacks.len() * 10 {
-            self.callbacks.shrink_to_fit();
+impl Drop for Context {
+    fn drop(&mut self) {
+        unsafe {
+            sys::ub_ctx_delete(self.ub_ctx);
         }
     }
 }
@@ -260,14 +257,24 @@ impl Context {
     pub fn set_option(&self, opt: &str, val: &str) -> Result<()> {
         let opt = try!(CString::new(opt));
         let val = try!(CString::new(val));
-        unsafe { into_result!(sys::ub_ctx_set_option(self.ub_ctx, opt.as_ptr(), val.as_ptr())) }
+        unsafe {
+            into_result!(sys::ub_ctx_set_option(
+                self.ub_ctx,
+                opt.as_ptr(),
+                val.as_ptr()
+            ))
+        }
     }
     /// Get the value of an option.
     pub fn get_option(&self, opt: &str) -> Result<String> {
         let opt = try!(CString::new(opt));
         unsafe {
             let mut result: *mut c_char = ptr::null_mut();
-            try!(into_result!(sys::ub_ctx_get_option(self.ub_ctx, opt.as_ptr(), &mut result)));
+            try!(into_result!(sys::ub_ctx_get_option(
+                self.ub_ctx,
+                opt.as_ptr(),
+                &mut result
+            )));
             // Assume values are always ASCII
             let val = CStr::from_ptr(result).to_str().unwrap().to_owned();
             libc::free(result as *mut c_void);
@@ -291,7 +298,8 @@ impl Context {
     /// Stub a zone to an IPv4 host.
     #[cfg(ub_ctx_set_stub)]
     pub fn set_stub4<T>(&self, zone: &str, ip: T, prime: bool) -> Result<()>
-        where T: Borrow<net::Ipv4Addr>
+    where
+        T: Borrow<net::Ipv4Addr>,
     {
         let mut buf = [0u8; IP_CSTR_MAX];
         let ip = ipv4_to_cstr(ip.borrow(), &mut buf);
@@ -300,7 +308,8 @@ impl Context {
     /// Stub a zone to an IPv6 host.
     #[cfg(ub_ctx_set_stub)]
     pub fn set_stub6<T>(&self, zone: &str, ip: T, prime: bool) -> Result<()>
-        where T: Borrow<net::Ipv6Addr>
+    where
+        T: Borrow<net::Ipv6Addr>,
     {
         let mut buf = [0u8; IP_CSTR_MAX];
         let ip = ipv6_to_cstr(ip.borrow(), &mut buf);
@@ -310,7 +319,12 @@ impl Context {
     fn set_stub_imp(&self, zone: &str, ip: &CStr, prime: bool) -> Result<()> {
         let zone = try!(CString::new(zone));
         unsafe {
-            into_result!(sys::ub_ctx_set_stub(self.ub_ctx, zone.as_ptr(), ip.as_ptr(), prime as _))
+            into_result!(sys::ub_ctx_set_stub(
+                self.ub_ctx,
+                zone.as_ptr(),
+                ip.as_ptr(),
+                prime as _
+            ))
         }
     }
     /// Forward queries to host.
@@ -394,7 +408,12 @@ impl Context {
     }
     /// Indicates whether there are any unprocessed asynchronous queries remaining.
     pub fn have_waiting(&self) -> bool {
-        !self.protected.lock().expect("have_waiting acquire protected").callbacks.is_empty()
+        !self
+            .protected
+            .lock()
+            .expect("have_waiting acquire protected")
+            .callbacks
+            .is_empty()
     }
     /// Waits for outstanding queries to complete and calls `self.process()`.
     pub fn wait(&self) -> Result<()> {
@@ -425,13 +444,17 @@ impl Context {
     /// Process results from the resolver (when `fd` is readable).
     pub fn process(&self) -> Result<()> {
         {
-            let guard = self.protected.lock().expect("process acquire protected for ub_process");
+            let guard = self
+                .protected
+                .lock()
+                .expect("process acquire protected for ub_process");
             try!(unsafe { into_result!(sys::ub_process(self.ub_ctx)) });
             drop(guard);
         }
         loop {
             let (callback, id, result) = {
-                let mut p = self.protected
+                let mut p = self
+                    .protected
                     .lock()
                     .expect("process acquire protected for invoking callbacks");
                 if let Some((id, result)) = p.results.pop() {
@@ -453,43 +476,58 @@ impl Context {
         let mut result: *mut sys::ub_result = ptr::null_mut();
         let name = try!(CString::new(name));
         unsafe {
-            into_result!(sys::ub_resolve(self.ub_ctx,
-                                         name.as_ptr(),
-                                         rrtype as c_int,
-                                         class as c_int,
-                                         &mut result),
-                         Answer(result))
+            into_result!(
+                sys::ub_resolve(
+                    self.ub_ctx,
+                    name.as_ptr(),
+                    rrtype as c_int,
+                    class as c_int,
+                    &mut result
+                ),
+                Answer(result)
+            )
         }
     }
     /// Resolve and validate a query asynchronously.
     /// Cancel the query by supplying the `AsyncID` to `cancel`.
     /// See also `fd`, `poll` and `process`.
-    pub fn resolve_async<C>(&self,
-                            name: &str,
-                            rrtype: u16,
-                            class: u16,
-                            callback: C)
-                            -> Result<AsyncID>
-        where C: Fn(AsyncID, Result<Answer>) + 'static
+    pub fn resolve_async<C>(
+        &self,
+        name: &str,
+        rrtype: u16,
+        class: u16,
+        callback: C,
+    ) -> Result<AsyncID>
+    where
+        C: Fn(AsyncID, Result<Answer>) + 'static,
     {
         let name = try!(CString::new(name));
         unsafe {
-            let mut p = self.protected.lock().expect("resolve_async acquire protected");
+            let mut p = self
+                .protected
+                .lock()
+                .expect("resolve_async acquire protected");
             let (id_raw, context_raw): (*mut AsyncID, *mut CallbackContext) = {
                 let mut context = Box::new((AsyncID(0), &mut p.results as *mut _));
                 (&mut context.0 as *mut _, Box::into_raw(context))
             };
-            let r = into_result!(sys::ub_resolve_async(self.ub_ctx,
-                                                       name.as_ptr(),
-                                                       rrtype as c_int,
-                                                       class as c_int,
-                                                       context_raw as *mut c_void,
-                                                       rust_unbound_callback,
-                                                       id_raw as *mut c_int),
-                                 *id_raw);
+            let r = into_result!(
+                sys::ub_resolve_async(
+                    self.ub_ctx,
+                    name.as_ptr(),
+                    rrtype as c_int,
+                    class as c_int,
+                    context_raw as *mut c_void,
+                    rust_unbound_callback,
+                    id_raw as *mut c_int
+                ),
+                *id_raw
+            );
             if r.is_ok() {
-                assert!(p.callbacks.insert(*id_raw, Box::new(callback)).is_none(),
-                        "ids are expected to be unique");
+                assert!(
+                    p.callbacks.insert(*id_raw, Box::new(callback)).is_none(),
+                    "ids are expected to be unique"
+                );
                 p.adjust_capacity();
             } else {
                 let _: Box<CallbackContext> = Box::from_raw(context_raw);
@@ -546,29 +584,39 @@ impl fmt::Debug for Context {
     }
 }
 
-unsafe extern "C" fn rust_unbound_callback(ctx_raw: *mut c_void,
-                                           error: c_int,
-                                           result: *mut sys::ub_result) {
+#[derive(Default)]
+struct ContextProtected {
+    callbacks: HashMap<AsyncID, Box<Fn(AsyncID, Result<Answer>) + 'static>>,
+    results: ResultVec,
+}
+
+impl ContextProtected {
+    fn adjust_capacity(&mut self) {
+        let results_reserve = self.callbacks.len();
+        let results_min = self.results.len() + results_reserve;
+        if self.results.capacity() > results_min * 10 {
+            self.results.shrink_to_fit();
+            self.results.reserve(results_reserve);
+        }
+        if self.callbacks.capacity() > self.callbacks.len() * 10 {
+            self.callbacks.shrink_to_fit();
+        }
+    }
+}
+
+unsafe extern "C" fn rust_unbound_callback(
+    ctx_raw: *mut c_void,
+    error: c_int,
+    result: *mut sys::ub_result,
+) {
     // The results Vec should always have capacity so this should never panic
     let ctx = Box::from_raw(ctx_raw as *mut CallbackContext);
     (*ctx.1).push((ctx.0, into_result!(error, Answer(result))));
 }
 
-
 /// Identifies an asynchronous query.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct AsyncID(c_int);
-
-unsafe impl Sync for Context {}
-unsafe impl Send for Context {}
-
-impl Drop for Context {
-    fn drop(&mut self) {
-        unsafe {
-            sys::ub_ctx_delete(self.ub_ctx);
-        }
-    }
-}
 
 /// Wraps `ub_version`.
 pub fn version() -> &'static str {
@@ -582,7 +630,8 @@ fn path_to_cstring(path: &Path) -> Result<CString> {
 fn ipv4_to_cstr<'a>(ip: &net::Ipv4Addr, buf: &'a mut [u8; IP_CSTR_MAX]) -> &'a CStr {
     let len = {
         let mut w = io::BufWriter::new(&mut buf[..]);
-        w.write_fmt(format_args!("{}", &ip)).expect("write_fmt ipv4");
+        w.write_fmt(format_args!("{}", &ip))
+            .expect("write_fmt ipv4");
         IP_CSTR_MAX + 1 - w.into_inner().expect("into_inner ipv4").len()
     };
     CStr::from_bytes_with_nul(&buf[..len]).expect("valid ipv4 c str")
@@ -591,7 +640,8 @@ fn ipv4_to_cstr<'a>(ip: &net::Ipv4Addr, buf: &'a mut [u8; IP_CSTR_MAX]) -> &'a C
 fn ipv6_to_cstr<'a>(ip: &net::Ipv6Addr, buf: &'a mut [u8; IP_CSTR_MAX]) -> &'a CStr {
     let len = {
         let mut w = io::BufWriter::new(&mut buf[..]);
-        w.write_fmt(format_args!("{}", &ip)).expect("write_fmt ipv6");
+        w.write_fmt(format_args!("{}", &ip))
+            .expect("write_fmt ipv6");
         IP_CSTR_MAX + 1 - w.into_inner().expect("into_inner ipv6").len()
     };
     CStr::from_bytes_with_nul(&buf[..len]).expect("valid ipv6 c str")

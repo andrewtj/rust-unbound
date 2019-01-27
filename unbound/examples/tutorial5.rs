@@ -20,13 +20,11 @@ fn main() {
     for (i, name) in ["www.nlnetlabs.nl", "www.google.nl"].iter().enumerate() {
         let ctx = ctx.clone();
         let name = name.to_string();
-        handles.push(thread::spawn(move || {
-            match ctx.resolve(&name, 1, 1) {
-                Err(err) => println!("thread {} - error resolving {}: {}", i, name, err),
-                Ok(ans) => {
-                    for ip in ans.data().map(util::data_to_ipv4) {
-                        println!("thread {} -  address of {} is {}", i, name, ip);
-                    }
+        handles.push(thread::spawn(move || match ctx.resolve(&name, 1, 1) {
+            Err(err) => println!("thread {} - error resolving {}: {}", i, name, err),
+            Ok(ans) => {
+                for ip in ans.data().map(util::data_to_ipv4) {
+                    println!("thread {} -  address of {} is {}", i, name, ip);
                 }
             }
         }));

@@ -12,12 +12,15 @@ use tempdir::TempDir;
 fn available(s: &str, extra_args: &[String]) -> io::Result<bool> {
     let temp = TempDir::new(s).expect("temporary dir");
     let main = temp.path().join("main.c");
-    let source = format!(r#"
+    let source = format!(
+        r#"
 #include <unbound.h>
 int main(void) {{
     void * _ = {};
 }}
-"#, s);
+"#,
+        s
+    );
     try!(File::create(&main).and_then(|mut f| f.write_all(source.as_bytes())));
     cc::Build::new()
         .cargo_metadata(false)

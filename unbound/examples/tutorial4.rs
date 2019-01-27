@@ -12,8 +12,8 @@ fn main() {
     let mut i = 0;
     let (tx, rx) = mpsc::channel();
 
-    let mycallback = move |_: unbound::AsyncID, result: unbound::Result<unbound::Answer>| {
-        match result {
+    let mycallback =
+        move |_: unbound::AsyncID, result: unbound::Result<unbound::Answer>| match result {
             Err(err) => println!("resolve error: {}", err),
             Ok(ans) => {
                 for ip in ans.data().map(util::data_to_ipv4) {
@@ -21,8 +21,7 @@ fn main() {
                 }
                 tx.send(true).unwrap();
             }
-        }
-    };
+        };
 
     match ctx.resolve_async("www.nlnetlabs.nl", 1, 1, mycallback) {
         Err(err) => {
