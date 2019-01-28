@@ -587,6 +587,31 @@ impl fmt::Debug for Context {
     }
 }
 
+#[cfg(feature = "mio")]
+impl mio::Evented for Context {
+    fn register(
+        &self,
+        poll: &mio::Poll,
+        token: mio::Token,
+        interest: mio::Ready,
+        opts: mio::PollOpt,
+    ) -> io::Result<()> {
+        mio::unix::EventedFd(&self.fd()).register(poll, token, interest, opts)
+    }
+    fn reregister(
+        &self,
+        poll: &mio::Poll,
+        token: mio::Token,
+        interest: mio::Ready,
+        opts: mio::PollOpt,
+    ) -> io::Result<()> {
+        mio::unix::EventedFd(&self.fd()).register(poll, token, interest, opts)
+    }
+    fn deregister(&self, poll: &mio::Poll) -> io::Result<()> {
+        mio::unix::EventedFd(&self.fd()).deregister(poll)
+    }
+}
+
 #[derive(Default)]
 struct ContextProtected {
     callbacks: HashMap<AsyncID, Box<Fn(AsyncID, Result<Answer>) + 'static>>,

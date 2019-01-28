@@ -11,8 +11,9 @@ build = "build.rs"
 keywords = ["dns", "dnssec"]
 
 [dependencies]
-unbound-sys = { version = "0.6", path = "../unbound-sys" }
 libc = "0.2"
+mio = { version = "0.6", optional = true }
+unbound-sys = { version = "0.6", path = "../unbound-sys" }
 
 [build-dependencies]
 tempdir = "0.3.5"
