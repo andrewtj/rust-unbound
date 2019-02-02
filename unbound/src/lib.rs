@@ -11,16 +11,19 @@
 //! * `ub_result` is wrapped by [Answer](struct.Answer.html). Methods on
 //! [Answer](struct.Answer.html) are used to safely access the fields of `ub_result`.
 //!
+//! *Note:* A panic during a callback will lead to an abort in Rust 1.24 and later.
+//! In earlier releases Rust will try to unwind which will not go well.
+//!
 extern crate libc;
 extern crate unbound_sys as sys;
 
 use std::borrow::Borrow;
-use std::collections::HashMap;
+use std::cell::UnsafeCell;
 use std::ffi::{CStr, CString, NulError};
 use std::io::{self, Write};
 use std::path::Path;
 use std::sync::Mutex;
-use std::{fmt, mem, net, ptr};
+use std::{fmt, net, ptr};
 
 use libc::{c_char, c_int, c_void};
 
@@ -222,8 +225,11 @@ impl<'a> std::iter::Iterator for DataIter<'a> {
     }
 }
 
-type ResultVec = Vec<(AsyncID, Result<Answer>)>;
-type CallbackContext = (AsyncID, *mut ResultVec);
+struct Callback {
+    async_id: AsyncID,
+    ub_id: c_int,
+    f: Box<Fn(AsyncID, Result<Answer>) + 'static>,
+}
 
 /// Wraps `ub_ctx`.
 pub struct Context {
@@ -261,11 +267,8 @@ impl Context {
         let opt = try!(CString::new(opt));
         let val = try!(CString::new(val));
         unsafe {
-            into_result!(sys::ub_ctx_set_option(
-                self.ub_ctx,
-                opt.as_ptr(),
-                val.as_ptr()
-            ))
+            let ub_err = sys::ub_ctx_set_option(self.ub_ctx, opt.as_ptr(), val.as_ptr());
+            into_result!(ub_err)
         }
     }
     /// Get the value of an option.
@@ -273,11 +276,8 @@ impl Context {
         let opt = try!(CString::new(opt));
         unsafe {
             let mut result: *mut c_char = ptr::null_mut();
-            try!(into_result!(sys::ub_ctx_get_option(
-                self.ub_ctx,
-                opt.as_ptr(),
-                &mut result
-            )));
+            let ub_err = sys::ub_ctx_get_option(self.ub_ctx, opt.as_ptr(), &mut result);
+            try!(into_result!(ub_err));
             // Assume values are always ASCII
             let val = CStr::from_ptr(result).to_str().unwrap().to_owned();
             libc::free(result as *mut c_void);
@@ -322,12 +322,8 @@ impl Context {
     fn set_stub_imp(&self, zone: &str, ip: &CStr, prime: bool) -> Result<()> {
         let zone = try!(CString::new(zone));
         unsafe {
-            into_result!(sys::ub_ctx_set_stub(
-                self.ub_ctx,
-                zone.as_ptr(),
-                ip.as_ptr(),
-                prime as _
-            ))
+            let ub_err = sys::ub_ctx_set_stub(self.ub_ctx, zone.as_ptr(), ip.as_ptr(), prime as _);
+            into_result!(ub_err)
         }
     }
     /// Forward queries to host.
@@ -421,22 +417,14 @@ impl Context {
     /// Waits for outstanding queries to complete and calls `self.process()`.
     pub fn wait(&self) -> Result<()> {
         unsafe {
-            let mut set: libc::fd_set = mem::uninitialized();
-            let fd = self.fd();
-            libc::FD_ZERO(&mut set);
-            libc::FD_SET(fd, &mut set);
-            let nfds = fd + 1;
-            let nil_set = 0 as *mut _;
-            let nil_tv = 0 as *mut _;
-            while self.have_waiting() {
-                libc::select(nfds, &mut set, nil_set, nil_set, nil_tv);
-                // Why call process blindly?
-                //  1 - Ready: work to be done.
-                //  0 - Timeout: process() won't block.
-                // -1 - Error: no errno to check, if it's non-temporary process() should return it.
-                try!(self.process())
-            }
-            Ok(())
+            CONTEXT_PTR.with(|cell| *cell.get() = &self.protected);
+            let ub_err = sys::ub_wait(self.ub_ctx);
+            CONTEXT_PTR.with(|cell| *cell.get() = std::ptr::null());
+            self.protected
+                .lock()
+                .expect("wait acquire protected")
+                .adjust_capacity();
+            into_result!(ub_err)
         }
     }
     /// Returns a file descriptor that is readable when one or more answers are ready.
@@ -446,32 +434,15 @@ impl Context {
     }
     /// Process results from the resolver (when `fd` is readable).
     pub fn process(&self) -> Result<()> {
-        {
-            let guard = self
-                .protected
+        unsafe {
+            CONTEXT_PTR.with(|cell| *cell.get() = &self.protected);
+            let ub_err = sys::ub_process(self.ub_ctx);
+            CONTEXT_PTR.with(|cell| *cell.get() = std::ptr::null());
+            self.protected
                 .lock()
-                .expect("process acquire protected for ub_process");
-            try!(unsafe { into_result!(sys::ub_process(self.ub_ctx)) });
-            drop(guard);
-        }
-        loop {
-            let (callback, id, result) = {
-                let mut p = self
-                    .protected
-                    .lock()
-                    .expect("process acquire protected for invoking callbacks");
-                if let Some((id, result)) = p.results.pop() {
-                    if let Some(callback) = p.callbacks.remove(&id) {
-                        (callback, id, result)
-                    } else {
-                        continue;
-                    }
-                } else {
-                    p.adjust_capacity();
-                    return Ok(());
-                }
-            };
-            callback(id, result)
+                .expect("process acquire protected")
+                .adjust_capacity();
+            into_result!(ub_err)
         }
     }
     /// Resolve and validate a query.
@@ -479,16 +450,14 @@ impl Context {
         let mut result: *mut sys::ub_result = ptr::null_mut();
         let name = try!(CString::new(name));
         unsafe {
-            into_result!(
-                sys::ub_resolve(
-                    self.ub_ctx,
-                    name.as_ptr(),
-                    rrtype as c_int,
-                    class as c_int,
-                    &mut result
-                ),
-                Answer(result)
-            )
+            let ub_err = sys::ub_resolve(
+                self.ub_ctx,
+                name.as_ptr(),
+                rrtype as c_int,
+                class as c_int,
+                &mut result,
+            );
+            into_result!(ub_err, Answer(result))
         }
     }
     /// Resolve and validate a query asynchronously.
@@ -505,53 +474,37 @@ impl Context {
         C: Fn(AsyncID, Result<Answer>) + 'static,
     {
         let name = try!(CString::new(name));
+        let f = Box::new(callback);
         unsafe {
             let mut p = self
                 .protected
                 .lock()
                 .expect("resolve_async acquire protected");
-            let (id_raw, context_raw): (*mut AsyncID, *mut CallbackContext) = {
-                let mut context = Box::new((AsyncID(0), &mut p.results as *mut _));
-                (&mut context.0 as *mut _, Box::into_raw(context))
-            };
-            let r = into_result!(
-                sys::ub_resolve_async(
-                    self.ub_ctx,
-                    name.as_ptr(),
-                    rrtype as c_int,
-                    class as c_int,
-                    context_raw as *mut c_void,
-                    rust_unbound_callback,
-                    id_raw as *mut c_int
-                ),
-                *id_raw
+            let async_id = AsyncID(p.next_id());
+            let mut ub_id: c_int = 0;
+            let ub_err = sys::ub_resolve_async(
+                self.ub_ctx,
+                name.as_ptr(),
+                rrtype as c_int,
+                class as c_int,
+                async_id.0 as *mut c_void,
+                rust_unbound_callback,
+                &mut ub_id,
             );
-            if r.is_ok() {
-                assert!(
-                    p.callbacks.insert(*id_raw, Box::new(callback)).is_none(),
-                    "ids are expected to be unique"
-                );
-                p.adjust_capacity();
-            } else {
-                let _: Box<CallbackContext> = Box::from_raw(context_raw);
+            let result = into_result!(ub_err, async_id);
+            if result.is_ok() {
+                p.callbacks.push(Callback { async_id, ub_id, f });
             }
-            r
+            result
         }
     }
     /// Cancel an asynchronous query.
     pub fn cancel(&self, id: AsyncID) {
         let mut p = self.protected.lock().expect("cancel acquire protected");
-        if p.callbacks.remove(&id).is_some() {
-            unsafe {
-                sys::ub_cancel(self.ub_ctx, id.0);
-                for i in 0..p.results.len() {
-                    if p.results[i].0 == id {
-                        p.results.swap_remove(i);
-                        p.adjust_capacity();
-                        return;
-                    }
-                }
-            }
+        if let Some(i) = p.callbacks.iter().position(|c| c.async_id == id) {
+            let ctx = p.callbacks.swap_remove(i);
+            unsafe { sys::ub_cancel(self.ub_ctx, ctx.ub_id) };
+            p.adjust_capacity();
         }
     }
     /// Print the local zone information to debug output.
@@ -614,37 +567,48 @@ impl mio::Evented for Context {
 
 #[derive(Default)]
 struct ContextProtected {
-    callbacks: HashMap<AsyncID, Box<Fn(AsyncID, Result<Answer>) + 'static>>,
-    results: ResultVec,
+    id: usize,
+    callbacks: Vec<Callback>,
 }
 
 impl ContextProtected {
     fn adjust_capacity(&mut self) {
-        let results_reserve = self.callbacks.len();
-        let results_min = self.results.len() + results_reserve;
-        if self.results.capacity() > results_min * 10 {
-            self.results.shrink_to_fit();
-            self.results.reserve(results_reserve);
-        }
-        if self.callbacks.capacity() > self.callbacks.len() * 10 {
+        if self.callbacks.capacity() > self.callbacks.len() * 4 {
             self.callbacks.shrink_to_fit();
         }
     }
+    fn next_id(&mut self) -> usize {
+        let id = self.id;
+        self.id = id.wrapping_add(1);
+        id
+    }
 }
+
+thread_local!(static CONTEXT_PTR: UnsafeCell<*const Mutex<ContextProtected>> = UnsafeCell::new(std::ptr::null()));
 
 unsafe extern "C" fn rust_unbound_callback(
     ctx_raw: *mut c_void,
-    error: c_int,
+    ub_err: c_int,
     result: *mut sys::ub_result,
 ) {
-    // The results Vec should always have capacity so this should never panic
-    let ctx = Box::from_raw(ctx_raw as *mut CallbackContext);
-    (*ctx.1).push((ctx.0, into_result!(error, Answer(result))));
+    let id = AsyncID(ctx_raw as usize);
+    let result = into_result!(ub_err, Answer(result));
+    let mut p = CONTEXT_PTR.with(|cell| {
+        (*cell.get())
+            .as_ref()
+            .expect("ContextProtectedMutex")
+            .lock()
+            .expect("lock callbacks")
+    });
+    if let Some(i) = p.callbacks.iter().position(|cb| cb.async_id == id) {
+        let f = p.callbacks.swap_remove(i).f;
+        f(id, result);
+    };
 }
 
 /// Identifies an asynchronous query.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct AsyncID(c_int);
+pub struct AsyncID(usize);
 
 /// Wraps `ub_version`.
 pub fn version() -> &'static str {
@@ -703,4 +667,17 @@ fn test_stub_after_final() {
     assert!(ctx.async_via_thread().is_ok());
     assert!(ctx.resolve_async("localhost", 1, 1, |_, _| {}).is_ok());
     assert!(ctx.set_stub4("example.net.", addr, false).is_err());
+}
+
+#[test]
+fn test_move_context() {
+    let mut a = Context::new().unwrap();
+    let mut b = Context::new().unwrap();
+    for c in &[&a, &b] {
+        c.async_via_thread().unwrap();
+    }
+    b.resolve_async("localhost", 1, 1, |_, _| {}).is_ok();
+    std::mem::swap(&mut a, &mut b);
+    drop(b);
+    a.wait().unwrap();
 }
