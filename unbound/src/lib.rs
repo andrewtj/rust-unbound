@@ -279,9 +279,9 @@ impl Context {
             let ub_err = sys::ub_ctx_get_option(self.ub_ctx, opt.as_ptr(), &mut result);
             try!(into_result!(ub_err));
             // Assume values are always ASCII
-            let val = CStr::from_ptr(result).to_str().unwrap().to_owned();
+            let val_r = CStr::from_ptr(result).to_str().map(String::from);
             libc::free(result as *mut c_void);
-            Ok(val)
+            Ok(val_r.unwrap())
         }
     }
     /// Set configuration from file.
