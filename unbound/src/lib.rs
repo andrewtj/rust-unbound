@@ -14,7 +14,8 @@
 //! *Note:* A panic during a callback will lead to an abort in Rust 1.24 and later.
 //! In earlier releases Rust will try to unwind which will not go well.
 //!
-use unbound_sys as sys;
+#[cfg(feature = "tokio")]
+mod tokio;
 
 use std::borrow::Borrow;
 use std::cell::UnsafeCell;
@@ -25,6 +26,11 @@ use std::sync::Mutex;
 use std::{fmt, net, ptr};
 
 use libc::{c_char, c_int, c_void};
+
+use unbound_sys as sys;
+
+#[cfg(feature = "tokio")]
+pub use crate::tokio::*;
 
 const IP_CSTR_MAX: usize = 40;
 
@@ -39,6 +45,8 @@ pub enum Error {
     UB(c_int),
     /// Argument contained invalid UTF8
     UTF8,
+    /// `ContextFuture` went away without returning a response.
+    LostContextFuture,
 }
 
 impl Error {
@@ -53,6 +61,7 @@ impl Error {
                 }
             }
             Error::UTF8 => "argument is invalid UTF-8",
+            Error::LostContextFuture => "`ContextFuture` went away",
         }
     }
 }
