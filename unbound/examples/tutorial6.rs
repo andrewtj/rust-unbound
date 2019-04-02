@@ -1,7 +1,6 @@
-use std::process::exit;
-extern crate unbound;
-
 mod util;
+
+use std::process::exit;
 
 fn main() {
     let ctx = unbound::Context::new().unwrap();

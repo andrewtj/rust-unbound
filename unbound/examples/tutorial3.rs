@@ -1,7 +1,5 @@
 use std::process::exit;
 
-extern crate unbound;
-
 fn examine_result(query: &str, result: &unbound::Answer) {
     println!("The query is for: {}", query);
     println!("The result has:");

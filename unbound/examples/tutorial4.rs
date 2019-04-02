@@ -3,8 +3,6 @@ use std::sync::mpsc;
 use std::thread::sleep;
 use std::time::Duration;
 
-extern crate unbound;
-
 mod util;
 
 fn main() {

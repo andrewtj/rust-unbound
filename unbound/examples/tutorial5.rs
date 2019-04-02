@@ -2,8 +2,6 @@ use std::process::exit;
 use std::sync::Arc;
 use std::thread;
 
-extern crate unbound;
-
 mod util;
 
 fn main() {

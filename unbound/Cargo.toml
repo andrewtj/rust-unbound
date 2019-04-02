@@ -2,6 +2,7 @@
 name = "unbound"
 version = "0.6.0"
 authors = ["Andrew Tunnell-Jones <andrew@tj.id.au>"]
+edition = "2018"
 license = "BSD-3-Clause"
 description = "Wraps libunbound; an implementation of a DNS resolver including cache and DNSSEC validation."
 documentation = "https://docs.rs/unbound"
