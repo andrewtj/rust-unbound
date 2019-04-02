@@ -2,6 +2,7 @@
 name = "unbound-sys"
 version = "0.6.0"
 authors = ["Andrew Tunnell-Jones <andrew@tj.id.au>"]
+edition = "2018"
 license = "BSD-3-Clause"
 description = "FFI bindings to libunbound"
 documentation = "https://docs.rs/unbound-sys"
