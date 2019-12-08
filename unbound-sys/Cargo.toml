@@ -11,7 +11,7 @@ build = "build.rs"
 links = "unbound"
 
 [dependencies]
-openssl = "0.9"
+openssl = "0.10"
 libc = "0.2"
 
 [build-dependencies]
