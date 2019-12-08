@@ -228,7 +228,7 @@ impl<'a> std::iter::Iterator for DataIter<'a> {
 struct Callback {
     async_id: AsyncID,
     ub_id: c_int,
-    f: Box<Fn(AsyncID, Result<Answer>) + 'static>,
+    f: Box<dyn Fn(AsyncID, Result<Answer>) + 'static>,
 }
 
 /// Wraps `ub_ctx`.
@@ -264,8 +264,8 @@ impl Context {
     }
     /// Set option `opt` to value `val`.
     pub fn set_option(&self, opt: &str, val: &str) -> Result<()> {
-        let opt = try!(CString::new(opt));
-        let val = try!(CString::new(val));
+        let opt = CString::new(opt)?;
+        let val = CString::new(val)?;
         unsafe {
             let ub_err = sys::ub_ctx_set_option(self.ub_ctx, opt.as_ptr(), val.as_ptr());
             into_result!(ub_err)
@@ -273,11 +273,11 @@ impl Context {
     }
     /// Get the value of an option.
     pub fn get_option(&self, opt: &str) -> Result<String> {
-        let opt = try!(CString::new(opt));
+        let opt = CString::new(opt)?;
         unsafe {
             let mut result: *mut c_char = ptr::null_mut();
             let ub_err = sys::ub_ctx_get_option(self.ub_ctx, opt.as_ptr(), &mut result);
-            try!(into_result!(ub_err));
+            into_result!(ub_err)?;
             // Assume values are always ASCII
             let val = CStr::from_ptr(result).to_str().unwrap().to_owned();
             libc::free(result as *mut c_void);
@@ -286,7 +286,7 @@ impl Context {
     }
     /// Set configuration from file.
     pub fn config<P: AsRef<Path>>(&self, path: P) -> Result<()> {
-        let path = try!(path_to_cstring(path.as_ref()));
+        let path = path_to_cstring(path.as_ref())?;
         unsafe { into_result!(sys::ub_ctx_config(self.ub_ctx, path.as_ptr())) }
     }
     // TODO: add test covering this, and for every other option
@@ -320,7 +320,7 @@ impl Context {
     }
     #[cfg(ub_ctx_set_stub)]
     fn set_stub_imp(&self, zone: &str, ip: &CStr, prime: bool) -> Result<()> {
-        let zone = try!(CString::new(zone));
+        let zone = CString::new(zone)?;
         unsafe {
             let ub_err = sys::ub_ctx_set_stub(self.ub_ctx, zone.as_ptr(), ip.as_ptr(), prime as _);
             into_result!(ub_err)
@@ -351,7 +351,7 @@ impl Context {
     }
     /// Read nameservers from a file.
     pub fn resolvconf_path<P: AsRef<Path>>(&self, path: P) -> Result<()> {
-        let path = try!(path_to_cstring(path.as_ref()));
+        let path = path_to_cstring(path.as_ref())?;
         unsafe { into_result!(sys::ub_ctx_resolvconf(self.ub_ctx, path.as_ptr())) }
     }
     /// Read hosts from /etc/hosts.
@@ -360,29 +360,29 @@ impl Context {
     }
     /// Read hosts from a file.
     pub fn hosts_path<P: AsRef<Path>>(&self, path: P) -> Result<()> {
-        let path = try!(path_to_cstring(path.as_ref()));
+        let path = path_to_cstring(path.as_ref())?;
         unsafe { into_result!(sys::ub_ctx_hosts(self.ub_ctx, path.as_ptr())) }
     }
     /// Add a single line string containing a valid DNSKEY or DS RR as a trust anchor.
     pub fn add_ta(&self, ta: &str) -> Result<()> {
-        let ta = try!(CString::new(ta));
+        let ta = CString::new(ta)?;
         unsafe { into_result!(sys::ub_ctx_add_ta(self.ub_ctx, ta.as_ptr())) }
     }
     /// Add a trust anchor that is updated automatically in line with
     /// [RFC 5011](https://tools.ietf.org/html/rfc5011).
     #[cfg(ub_ctx_add_ta_autr)]
     pub fn add_ta_autr<P: AsRef<Path>>(&self, path: P) -> Result<()> {
-        let path = try!(path_to_cstring(path.as_ref()));
+        let path = path_to_cstring(path.as_ref())?;
         unsafe { into_result!(sys::ub_ctx_add_ta_autr(self.ub_ctx, path.as_ptr())) }
     }
     /// Add trust anchors from a file containing DS and DNSKEY records.
     pub fn add_ta_file<P: AsRef<Path>>(&self, path: P) -> Result<()> {
-        let path = try!(path_to_cstring(path.as_ref()));
+        let path = path_to_cstring(path.as_ref())?;
         unsafe { into_result!(sys::ub_ctx_add_ta_file(self.ub_ctx, path.as_ptr())) }
     }
     /// Add trust anchors from a BIND-style configuration file.
     pub fn trustedkeys<P: AsRef<Path>>(&self, path: P) -> Result<()> {
-        let path = try!(path_to_cstring(path.as_ref()));
+        let path = path_to_cstring(path.as_ref())?;
         unsafe { into_result!(sys::ub_ctx_trustedkeys(self.ub_ctx, path.as_ptr())) }
     }
     /// Set debug and error output to the specified stream.
@@ -448,7 +448,7 @@ impl Context {
     /// Resolve and validate a query.
     pub fn resolve(&self, name: &str, rrtype: u16, class: u16) -> Result<Answer> {
         let mut result: *mut sys::ub_result = ptr::null_mut();
-        let name = try!(CString::new(name));
+        let name = CString::new(name)?;
         unsafe {
             let ub_err = sys::ub_resolve(
                 self.ub_ctx,
@@ -473,7 +473,7 @@ impl Context {
     where
         C: Fn(AsyncID, Result<Answer>) + 'static,
     {
-        let name = try!(CString::new(name));
+        let name = CString::new(name)?;
         let f = Box::new(callback);
         unsafe {
             let mut p = self
@@ -513,23 +513,23 @@ impl Context {
     }
     /// Add or update the zone `zone_name` as type `zone_type`.
     pub fn zone_add(&self, zone_name: &str, zone_type: &str) -> Result<()> {
-        let n = try!(CString::new(zone_name));
-        let t = try!(CString::new(zone_type));
+        let n = CString::new(zone_name)?;
+        let t = CString::new(zone_type)?;
         unsafe { into_result!(sys::ub_ctx_zone_add(self.ub_ctx, n.as_ptr(), t.as_ptr())) }
     }
     /// Remove the zone `zone_name`.
     pub fn zone_remove(&self, zone_name: &str) -> Result<()> {
-        let n = try!(CString::new(zone_name));
+        let n = CString::new(zone_name)?;
         unsafe { into_result!(sys::ub_ctx_zone_remove(self.ub_ctx, n.as_ptr())) }
     }
     /// Add a DNS record.
     pub fn data_add(&self, data: &str) -> Result<()> {
-        let data = try!(CString::new(data));
+        let data = CString::new(data)?;
         unsafe { into_result!(sys::ub_ctx_data_add(self.ub_ctx, data.as_ptr())) }
     }
     /// Delete data (inserted by `data_add`) from `name`.
     pub fn data_remove(&self, name: &str) -> Result<()> {
-        let data = try!(CString::new(name));
+        let data = CString::new(name)?;
         unsafe { into_result!(sys::ub_ctx_data_remove(self.ub_ctx, data.as_ptr())) }
     }
 }
@@ -616,7 +616,7 @@ pub fn version() -> &'static str {
 }
 
 fn path_to_cstring(path: &Path) -> Result<CString> {
-    Ok(try!(CString::new(try!(path.to_str().ok_or(Error::UTF8)))))
+    Ok(CString::new(path.to_str().ok_or(Error::UTF8)?)?)
 }
 
 fn ipv4_to_cstr<'a>(ip: &net::Ipv4Addr, buf: &'a mut [u8; IP_CSTR_MAX]) -> &'a CStr {
@@ -676,7 +676,7 @@ fn test_move_context() {
     for c in &[&a, &b] {
         c.async_via_thread().unwrap();
     }
-    b.resolve_async("localhost", 1, 1, |_, _| {}).is_ok();
+    b.resolve_async("localhost", 1, 1, |_, _| {}).unwrap();
     std::mem::swap(&mut a, &mut b);
     drop(b);
     a.wait().unwrap();
