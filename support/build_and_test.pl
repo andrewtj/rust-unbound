@@ -10,10 +10,17 @@ my @manifests = (
     catfile($workspace_dir, "unbound", "Cargo.toml"),
     catfile($workspace_dir, "unbound-sys", "Cargo.toml"),
 );
+my @features = (
+    'ub_ctx_set_tls',
+    'ub_ctx_set_stub',
+    'ub_ctx_add_ta_autr',
+);
 
 foreach my $command (@commands) {
     foreach my $manifest (@manifests) {
-        my $exec = "cargo $command --verbose --manifest-path $manifest";
-        die "$command $manifest failed" unless system($exec) eq 0;
+        foreach my $feature (@features) {
+            my $exec = "cargo $command --verbose --manifest-path $manifest --features $feature --lib";
+            die "$command $manifest $feature failed" unless system($exec) eq 0;
+        }
     }
 }

@@ -30,7 +30,7 @@ if ( ! m/status: NOERROR/ || ! m/ANSWER: [1-9]/ ) {
 my @examples = (
     "tutorial1",
     "tutorial2",
-    "tutorial3 reckoner.com.au thesizzle.com.au",
+    "tutorial3 rust-lang.org nlnetlabs.nl",
     "tutorial4",
     "tutorial5",
     "tutorial6",

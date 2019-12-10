@@ -11,9 +11,14 @@ build = "build.rs"
 links = "unbound"
 
 [dependencies]
-openssl = "0.10"
 libc = "0.2"
+openssl = "0.10"
 
 [build-dependencies]
-tempdir = "0.3.5"
 cc = "1.0"
+tempdir = "0.3.5"
+
+[features]
+ub_ctx_set_stub = []
+ub_ctx_add_ta_autr = []
+ub_ctx_set_tls = []

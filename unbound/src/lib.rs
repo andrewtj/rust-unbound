@@ -7,6 +7,10 @@
 //! * `ub_ctx` is wrapped by [Context](struct.Context.html). OpenSSL is initialised when a
 //! [Context](struct.Context.html) is substantiated. Functions from libunbound that
 //! operate on `ub_ctx` are accessed using methods on [Context](struct.Context.html).
+//! The following methods are behind feature flags of the same name:
+//!   * `ub_ctx_set_stub`
+//!   * `ub_ctx_add_ta_autr`
+//!   * `ub_ctx_set_tls`
 //!
 //! * `ub_result` is wrapped by [Answer](struct.Answer.html). Methods on
 //! [Answer](struct.Answer.html) are used to safely access the fields of `ub_result`.
@@ -17,13 +21,13 @@
 extern crate libc;
 extern crate unbound_sys as sys;
 
-use std::borrow::Borrow;
 use std::cell::UnsafeCell;
 use std::ffi::{CStr, CString, NulError};
 use std::io::{self, Write};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::path::Path;
 use std::sync::Mutex;
-use std::{fmt, net, ptr};
+use std::{fmt, ptr};
 
 use libc::{c_char, c_int, c_void};
 
@@ -291,34 +295,28 @@ impl Context {
     }
     // TODO: add test covering this, and for every other option
     /// Stub a zone to a host.
-    #[cfg(ub_ctx_set_stub)]
-    pub fn set_stub<T: Borrow<net::IpAddr>>(&self, zone: &str, ip: T, prime: bool) -> Result<()> {
-        match ip.borrow() {
-            &net::IpAddr::V4(ref ip) => self.set_stub4(zone, ip, prime),
-            &net::IpAddr::V6(ref ip) => self.set_stub6(zone, ip, prime),
+    #[cfg(feature = "ub_ctx_set_stub")]
+    pub fn set_stub(&self, zone: &str, ip: IpAddr, prime: bool) -> Result<()> {
+        match ip {
+            IpAddr::V4(ip) => self.set_stub4(zone, ip, prime),
+            IpAddr::V6(ip) => self.set_stub6(zone, ip, prime),
         }
     }
     /// Stub a zone to an IPv4 host.
-    #[cfg(ub_ctx_set_stub)]
-    pub fn set_stub4<T>(&self, zone: &str, ip: T, prime: bool) -> Result<()>
-    where
-        T: Borrow<net::Ipv4Addr>,
-    {
+    #[cfg(feature = "ub_ctx_set_stub")]
+    pub fn set_stub4(&self, zone: &str, ip: Ipv4Addr, prime: bool) -> Result<()> {
         let mut buf = [0u8; IP_CSTR_MAX];
-        let ip = ipv4_to_cstr(ip.borrow(), &mut buf);
-        self.set_stub_imp(zone, ip, prime)
+        let ip_cstr = fmt_to_cstr(ip, &mut buf[..]);
+        self.set_stub_imp(zone, ip_cstr, prime)
     }
     /// Stub a zone to an IPv6 host.
-    #[cfg(ub_ctx_set_stub)]
-    pub fn set_stub6<T>(&self, zone: &str, ip: T, prime: bool) -> Result<()>
-    where
-        T: Borrow<net::Ipv6Addr>,
-    {
+    #[cfg(feature = "ub_ctx_set_stub")]
+    pub fn set_stub6(&self, zone: &str, ip: Ipv6Addr, prime: bool) -> Result<()> {
         let mut buf = [0u8; IP_CSTR_MAX];
-        let ip = ipv6_to_cstr(ip.borrow(), &mut buf);
-        self.set_stub_imp(zone, ip, prime)
+        let ip_cstr = fmt_to_cstr(ip, &mut buf[..]);
+        self.set_stub_imp(zone, ip_cstr, prime)
     }
-    #[cfg(ub_ctx_set_stub)]
+    #[cfg(feature = "ub_ctx_set_stub")]
     fn set_stub_imp(&self, zone: &str, ip: &CStr, prime: bool) -> Result<()> {
         let zone = CString::new(zone)?;
         unsafe {
@@ -327,23 +325,28 @@ impl Context {
         }
     }
     /// Forward queries to host.
-    pub fn set_fwd<T: Borrow<net::IpAddr>>(&self, ip: T) -> Result<()> {
-        match ip.borrow() {
-            &net::IpAddr::V4(ref ip) => self.set_fwd4(ip),
-            &net::IpAddr::V6(ref ip) => self.set_fwd6(ip),
+    pub fn set_fwd(&self, ip: IpAddr) -> Result<()> {
+        match ip {
+            IpAddr::V4(ip) => self.set_fwd4(ip),
+            IpAddr::V6(ip) => self.set_fwd6(ip),
         }
     }
     /// Forward queries to an IPv4 host.
-    pub fn set_fwd4<T: Borrow<net::Ipv4Addr>>(&self, ip: T) -> Result<()> {
+    pub fn set_fwd4(&self, ip: Ipv4Addr) -> Result<()> {
         let mut buf = [0u8; IP_CSTR_MAX];
-        let target = ipv4_to_cstr(ip.borrow(), &mut buf);
-        unsafe { into_result!(sys::ub_ctx_set_fwd(self.ub_ctx, target.as_ptr())) }
+        let ip_cstr = fmt_to_cstr(ip, &mut buf[..]);
+        unsafe { into_result!(sys::ub_ctx_set_fwd(self.ub_ctx, ip_cstr.as_ptr())) }
     }
     /// Forward queries to an IPv6 host.
-    pub fn set_fwd6<T: Borrow<net::Ipv6Addr>>(&self, ip: T) -> Result<()> {
+    pub fn set_fwd6(&self, ip: Ipv6Addr) -> Result<()> {
         let mut buf = [0u8; IP_CSTR_MAX];
-        let target = ipv6_to_cstr(ip.borrow(), &mut buf);
-        unsafe { into_result!(sys::ub_ctx_set_fwd(self.ub_ctx, target.as_ptr())) }
+        let ip_cstr = fmt_to_cstr(ip, &mut buf[..]);
+        unsafe { into_result!(sys::ub_ctx_set_fwd(self.ub_ctx, ip_cstr.as_ptr())) }
+    }
+    /// Enable DNS over TLS (DoT) for forwarded queries.
+    #[cfg(feature = "ub_ctx_set_tls")]
+    pub fn set_tls(&self, value: libc::c_int) -> Result<()> {
+        unsafe { into_result!(sys::ub_ctx_set_tls(self.ub_ctx, value)) }
     }
     /// Read nameservers from /etc/resolv.conf.
     pub fn resolvconf(&self) -> Result<()> {
@@ -370,7 +373,7 @@ impl Context {
     }
     /// Add a trust anchor that is updated automatically in line with
     /// [RFC 5011](https://tools.ietf.org/html/rfc5011).
-    #[cfg(ub_ctx_add_ta_autr)]
+    #[cfg(feature = "ub_ctx_add_ta_autr")]
     pub fn add_ta_autr<P: AsRef<Path>>(&self, path: P) -> Result<()> {
         let path = path_to_cstring(path.as_ref())?;
         unsafe { into_result!(sys::ub_ctx_add_ta_autr(self.ub_ctx, path.as_ptr())) }
@@ -384,14 +387,6 @@ impl Context {
     pub fn trustedkeys<P: AsRef<Path>>(&self, path: P) -> Result<()> {
         let path = path_to_cstring(path.as_ref())?;
         unsafe { into_result!(sys::ub_ctx_trustedkeys(self.ub_ctx, path.as_ptr())) }
-    }
-    /// Set debug and error output to the specified stream.
-    pub fn debugout(&self, out: *mut libc::FILE) -> Result<()> {
-        unsafe { into_result!(sys::ub_ctx_debugout(self.ub_ctx, out as *mut _)) }
-    }
-    /// Set debug verbosity. 0 is off, 1 is very minimal, 2 is detailed, and 3 is lots.
-    pub fn debuglevel(&self, d: c_int) -> Result<()> {
-        unsafe { into_result!(sys::ub_ctx_debuglevel(self.ub_ctx, d)) }
     }
     /// Do asynchronous resolution in a fork.
     pub fn async_via_fork(&self) -> Result<()> {
@@ -507,10 +502,6 @@ impl Context {
             p.adjust_capacity();
         }
     }
-    /// Print the local zone information to debug output.
-    pub fn print_local_zones(&self) -> Result<()> {
-        unsafe { into_result!(sys::ub_ctx_print_local_zones(self.ub_ctx)) }
-    }
     /// Add or update the zone `zone_name` as type `zone_type`.
     pub fn zone_add(&self, zone_name: &str, zone_type: &str) -> Result<()> {
         let n = CString::new(zone_name)?;
@@ -619,24 +610,14 @@ fn path_to_cstring(path: &Path) -> Result<CString> {
     Ok(CString::new(path.to_str().ok_or(Error::UTF8)?)?)
 }
 
-fn ipv4_to_cstr<'a>(ip: &net::Ipv4Addr, buf: &'a mut [u8; IP_CSTR_MAX]) -> &'a CStr {
-    let len = {
-        let mut w = io::BufWriter::new(&mut buf[..]);
-        w.write_fmt(format_args!("{}", &ip))
-            .expect("write_fmt ipv4");
-        IP_CSTR_MAX + 1 - w.into_inner().expect("into_inner ipv4").len()
-    };
-    CStr::from_bytes_with_nul(&buf[..len]).expect("valid ipv4 c str")
-}
-
-fn ipv6_to_cstr<'a>(ip: &net::Ipv6Addr, buf: &'a mut [u8; IP_CSTR_MAX]) -> &'a CStr {
-    let len = {
-        let mut w = io::BufWriter::new(&mut buf[..]);
-        w.write_fmt(format_args!("{}", &ip))
-            .expect("write_fmt ipv6");
-        IP_CSTR_MAX + 1 - w.into_inner().expect("into_inner ipv6").len()
-    };
-    CStr::from_bytes_with_nul(&buf[..len]).expect("valid ipv6 c str")
+fn fmt_to_cstr<T>(t: T, buf: &mut [u8]) -> &CStr
+where
+    T: std::fmt::Display,
+{
+    let mut w = io::Cursor::new(&mut buf[..]);
+    w.write_fmt(format_args!("{}\x00", t)).expect("write_fmt");
+    let len = w.position() as usize;
+    CStr::from_bytes_with_nul(&buf[..len]).expect("cstr")
 }
 
 #[test]
@@ -651,14 +632,14 @@ fn test_ctx_options() {
     assert!(ctx.resolvconf().is_ok());
     assert!(ctx.resolvconf_path("test/google-dns-resolv.conf").is_ok());
     assert!(ctx.resolvconf_path("test/no-such-file").is_err());
-    assert!(ctx.set_fwd4(net::Ipv4Addr::new(8, 8, 8, 8)).is_ok());
+    assert!(ctx.set_fwd4(Ipv4Addr::new(8, 8, 8, 8)).is_ok());
     assert!(ctx.hosts().is_ok());
     assert!(ctx.hosts_path("test/empty").is_ok());
     assert!(ctx.hosts_path("test/no-such-file").is_err());
 }
 
 #[test]
-#[cfg(ub_ctx_set_stub)]
+#[cfg(feature = "ub_ctx_set_stub")]
 fn test_stub_after_final() {
     let ctx = Context::new().unwrap();
     let addr = net::Ipv4Addr::from([0xDD; 4]);
@@ -667,6 +648,17 @@ fn test_stub_after_final() {
     assert!(ctx.async_via_thread().is_ok());
     assert!(ctx.resolve_async("localhost", 1, 1, |_, _| {}).is_ok());
     assert!(ctx.set_stub4("example.net.", addr, false).is_err());
+}
+
+#[test]
+#[cfg(feature = "ub_ctx_set_tls")]
+fn test_ub_ctx_set_tls() {
+    let ctx = Context::new().unwrap();
+    let addr = Ipv4Addr::from([1; 4]);
+    assert!(ctx.set_fwd4(addr).is_ok());
+    assert!(ctx.set_tls(1).is_ok());
+    assert!(ctx.resolve_async("localhost", 1, 1, |_, _| {}).is_ok());
+    assert!(ctx.set_tls(1).is_err());
 }
 
 #[test]
